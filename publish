@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+# ./publish <subdomain> [origin]
+# Tambah public hostname ke Cloudflare Tunnel + CNAME (idempoten).
+# origin default: http://traefik:80  (routing Host() ada di label traefik)
+# Contoh: ./publish app        -> app.itukan.my.id
+#         ./publish grafana http://host.docker.internal:3000
+set -euo pipefail
+
+cd "$(dirname "$(readlink -f "$0")")"
+
+ACCOUNT_ID="704cdc3baf4cd34018a536e0a560f830"
+TUNNEL_ID="44703f6e-2691-4677-8fe0-57245730f516"
+DOMAIN="itukan.my.id"
+
+sub="${1:-}"
+origin="${2:-http://traefik:80}"
+[ -n "$sub" ] || { echo "Pemakaian: ./publish <subdomain> [origin]" >&2; exit 2; }
+host="${sub}.${DOMAIN}"
+
+[ -f secrets/cf-api-token.env ] || { echo "secrets/cf-api-token.env tidak ada" >&2; exit 1; }
+set -a; . secrets/cf-api-token.env; set +a
+[ -n "${CF_API_TOKEN:-}" ] || { echo "CF_API_TOKEN kosong" >&2; exit 1; }
+
+api() { # api METHOD PATH [json-body]
+  local m="$1" p="$2" body="${3:-}"
+  local args=(-s -m 20 -H "Authorization: Bearer $CF_API_TOKEN" -H "Content-Type: application/json" -X "$m")
+  [ -n "$body" ] && args+=(--data "$body")
+  curl "${args[@]}" "https://api.cloudflare.com/client/v4${p}"
+}
+
+jq_check() { python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+if not d.get('success'):
+    print(json.dumps(d.get('errors'), ensure_ascii=False), file=sys.stderr); sys.exit(1)
+print(json.dumps(d.get('result')))
+"; }
+
+echo "host: $host  origin: $origin"
+
+# 1) GET config sekarang
+cur=$(api GET "/accounts/${ACCOUNT_ID}/cfd_tunnel/${TUNNEL_ID}/configurations" | jq_check)
+
+# 2) idempoten + PUT (append sebelum catch-all)
+new=$(HOST="$host" ORIGIN="$origin" python3 -c "
+import json,os,sys
+cfg=json.loads(sys.stdin.read())
+ing=cfg.get('config',{}).get('ingress',[])
+host=os.environ['HOST']; origin=os.environ['ORIGIN']
+for r in ing:
+    if r.get('hostname')==host:
+        print(json.dumps({'skip':True,'reason':'sudah ada','service':r.get('service')})); sys.exit(0)
+catch=[r for r in ing if 'hostname' not in r]
+rules=[r for r in ing if 'hostname' in r]
+rules.append({'hostname':host,'service':origin,'originRequest':{'httpHostHeader':host}})
+cfg['config']={'ingress':rules+catch,'warp-routing':cfg.get('config',{}).get('warp-routing',{'enabled':False})}
+print(json.dumps({'skip':False,'config':cfg['config']}))
+" <<<"$cur")
+
+if python3 -c "import json,sys; sys.exit(0 if json.loads(sys.stdin.read())['skip'] else 1)" <<<"$new"; then
+  echo "ingress: sudah ada, lanjut cek DNS"
+else
+  payload=$(python3 -c "import json,sys; print(json.dumps({'config':json.loads(sys.stdin.read())['config']}))" <<<"$new")
+  api PUT "/accounts/${ACCOUNT_ID}/cfd_tunnel/${TUNNEL_ID}/configurations" "$payload" | jq_check >/dev/null
+  echo "ingress: OK (ditambahkan, origin=$origin)"
+fi
+
+# 3) DNS CNAME idempoten
+zone=$(api GET "/zones?name=${DOMAIN}" | jq_check | python3 -c "import json,sys; print(json.load(sys.stdin)[0]['id'])")
+exists=$(api GET "/zones/${zone}/dns_records?type=CNAME&name=${host}" | jq_check)
+if python3 -c "import json,sys; sys.exit(0 if json.load(sys.stdin) else 1)" <<<"$exists"; then
+  echo "dns: CNAME sudah ada"
+else
+  api POST "/zones/${zone}/dns_records" "{\"type\":\"CNAME\",\"proxied\":true,\"name\":\"${host}\",\"content\":\"${TUNNEL_ID}.cfargotunnel.com\"}" | jq_check >/dev/null
+  echo "dns: CNAME dibuat -> ${TUNNEL_ID}.cfargotunnel.com"
+fi
+
+echo "selesai: https://${host}/  (cloudflared terima config baru dalam ~10s)"

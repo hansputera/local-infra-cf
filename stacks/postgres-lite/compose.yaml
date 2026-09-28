@@ -1,0 +1,27 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  # Contoh DB — BUKAN produksi. Hanya network internal, tanpa publish port.
+  # Data bind ke ~/infra/data/ (nanti pindah /srv saat NVMe 1TB terpasang).
+  postgres-lite:
+    image: postgres:17-alpine
+    profiles: ["lab"]
+    restart: "no"
+    networks: [internal]
+    env_file:
+      - ../../secrets/postgres.env
+    volumes:
+      - ../../data/postgres:/var/lib/postgresql/data
+    mem_limit: 512m
+    cpus: 0.5
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-app} -d $${POSTGRES_DB:-app}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s

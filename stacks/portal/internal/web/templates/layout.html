@@ -1,0 +1,32 @@
+{{define "header"}}
+<!doctype html>
+<html lang="id" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Title}} · Infra Manager</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/app.js" defer></script>
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="/">Infra Manager</a>
+  <span class="domain mono">{{.Domain}}</span>
+  <button type="button" class="theme" id="theme-toggle" aria-pressed="false">Mode gelap</button>
+</header>
+
+<div class="shell">
+<nav class="nav" aria-label="Navigasi utama">
+  <a href="/" class="{{if eq .Active "dash"}}on{{end}}">Dashboard</a>
+  <a href="/services" class="{{if eq .Active "services"}}on{{end}}">Hostnames</a>
+  <a href="/nodes" class="{{if eq .Active "nodes"}}on{{end}}">Tunnel &amp; Node</a>
+  <a href="/stacks" class="{{if eq .Active "stacks"}}on{{end}}">Stack</a>
+</nav>
+
+<main>
+{{if .FlashOK}}<p class="flash ok" role="status">{{.FlashOK}}</p>{{end}}
+{{if .FlashErr}}<p class="flash err" role="alert">{{.FlashErr}}</p>{{end}}
+{{end}}

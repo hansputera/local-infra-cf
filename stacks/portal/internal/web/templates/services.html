@@ -1,0 +1,62 @@
+{{template "header" .}}
+<div class="page-head">
+  <div>
+    <h1>Hostnames</h1>
+    <p class="sub">Setiap baris = satu hostname. Tombol sinkron menulis ulang router traefik, ingress tunnel, dan DNS.</p>
+  </div>
+  <a class="btn" href="/services/new">Tambah hostname</a>
+</div>
+
+{{if eq (len .Services) 0}}
+  <div class="panel">
+    <p class="empty">Belum ada hostname. <a href="/services/new">Tambah hostname pertama</a> (mis. whoami.{{.Domain}}).</p>
+  </div>
+{{else}}
+<div class="panel">
+  <table>
+    <thead>
+      <tr>
+        <th>Hostname</th>
+        <th>Target</th>
+        <th>Jenis</th>
+        <th>Status</th>
+        <th>Aksi</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range .Services}}
+      <tr>
+        <td class="mono">
+          {{.Hostname}}
+          {{if eq .Source "adopted"}}<span class="tag">adopt</span>{{end}}
+          {{if eq .Routing "label"}}<span class="tag">label compose</span>{{end}}
+          {{if .TunnelName}}<span class="tag">{{.TunnelName}}</span>{{end}}
+          {{if .NodeName}}<span class="tag">node {{.NodeName}}</span>{{end}}
+        </td>
+        <td class="mono">{{.Target}}:{{.Port}}</td>
+        <td>{{if eq .Kind "public"}}publik{{else}}privat{{end}}</td>
+        <td>
+          {{if .Drift}}
+            <span class="mark drift">DRIFT</span>
+          {{else if eq .Container "missing"}}
+            <span class="mark off">OFFLINE</span>
+          {{else}}
+            <span class="mark ok">OK</span>
+          {{end}}
+        </td>
+        <td class="actions">
+          <form method="post" action="/services/{{.Name}}/reconcile" class="inline">
+            <button type="submit" class="small">Sinkron</button>
+          </form>
+          <a class="small btn ghost" href="/services/{{.Name}}/edit">Ubah</a>
+          <form method="post" action="/services/{{.Name}}/delete" class="inline" data-confirm="Hapus {{.Hostname}} dari registry, ingress Cloudflare, DNS, dan file traefik?">
+            <button type="submit" class="small danger">Hapus</button>
+          </form>
+        </td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+</div>
+{{end}}
+{{template "footer" .}}

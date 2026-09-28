@@ -1,0 +1,27 @@
+# Traefik v3 — static config
+entryPoints:
+  web:
+    address: ":80" # dibuka cloudflared (network proxy) + 127.0.0.1 untuk tes lokal
+  traefik:
+    address: ":8080" # dashboard + service PRIVATE (hanya 127.0.0.1)
+
+api:
+  dashboard: true
+  insecure: false # dashboard via router api@internal di dynamic/dashboard.yml
+
+ping: {} # healthcheck: http://127.0.0.1:8080/ping
+
+providers:
+  docker:
+    endpoint: "unix:///var/run/docker.sock"
+    exposedByDefault: false
+    network: proxy
+  file:
+    directory: /etc/traefik/dynamic
+    watch: true
+
+log:
+  level: INFO
+  format: json
+
+accessLog: {}

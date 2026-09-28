@@ -1,0 +1,8 @@
+# Dashboard Traefik — hanya di entrypoint `traefik` (127.0.0.1:8080), tidak pernah via tunnel.
+http:
+  routers:
+    dashboard:
+      rule: "PathPrefix(`/api`) || PathPrefix(`/dashboard`)"
+      service: api@internal
+      entryPoints:
+        - traefik

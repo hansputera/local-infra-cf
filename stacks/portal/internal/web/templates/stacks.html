@@ -1,0 +1,92 @@
+{{template "header" .}}
+<div class="page-head">
+  <div>
+    <h1>Stack</h1>
+    <p class="sub">Generator <span class="mono">stacks/&lt;nama&gt;/compose.yaml</span> plus entri include di root compose. Aksi jalankan memakai <span class="mono">docker compose</span> dari root project.</p>
+  </div>
+</div>
+
+{{if .Err}}<p class="flash err" role="alert">{{.Err}}</p>{{end}}
+
+<section class="row2">
+  <div class="panel">
+    <h2>Stack terdaftar</h2>
+    {{if eq (len .Stacks) 0}}
+      <p class="empty">Belum ada stack. Buat satu lewat formulir di samping: image + port + hostname opsional.</p>
+    {{else}}
+      <table>
+        <thead><tr><th>Nama</th><th>Image</th><th>Include</th><th>Aksi</th></tr></thead>
+        <tbody>
+          {{range .Stacks}}
+          <tr>
+            <td class="mono">{{.Name}}</td>
+            <td class="mono">{{if .Image}}{{.Image}}{{else}}-{{end}}</td>
+            <td>{{if .Included}}<span class="mark ok">AKTIF</span>{{else}}<span class="mark drift">TIDAK DI-INCLUDE</span>{{end}}</td>
+            <td class="actions">
+              <form method="post" action="/stacks/{{.Name}}/up" class="inline">
+                <button type="submit" class="small">Jalankan</button>
+              </form>
+              <form method="post" action="/stacks/{{.Name}}/stop" class="inline">
+                <button type="submit" class="small ghost">Berhenti</button>
+              </form>
+              <form method="post" action="/stacks/{{.Name}}/delete" class="inline" data-confirm="Hapus file compose stack {{.Name}} dan entri include-nya?">
+                <button type="submit" class="small danger">Hapus</button>
+              </form>
+            </td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    {{end}}
+    {{if .ComposeOut}}
+      <details class="log">
+        <summary>Output compose terakhir</summary>
+        <pre class="mono">{{.ComposeOut}}</pre>
+      </details>
+    {{end}}
+  </div>
+
+  <div class="panel narrow">
+    <h2>Buat stack baru</h2>
+    <form method="post" action="/stacks">
+      <label for="sname">Nama service</label>
+      <input id="sname" name="name" required pattern="[a-z0-9]([a-z0-9-]*[a-z0-9])?" placeholder="caddy">
+
+      <label for="image">Image</label>
+      <input id="image" name="image" required placeholder="nginx:alpine">
+
+      <label for="sport">Port container</label>
+      <input id="sport" name="port" type="number" min="1" max="65535" placeholder="80">
+      <p class="hint">Kosongkan kalau service tidak butuh port (mis. worker).</p>
+
+      <label for="shost">Hostname publik (opsional)</label>
+      <input id="shost" name="hostname" placeholder="caddy.{{.Domain}}">
+      <p class="hint">Diisi = stack sekaligus didaftarkan ke Hostnames dan disinkronkan ke Cloudflare.</p>
+
+      <label for="profile">Profil</label>
+      <select id="profile" name="profile">
+        <option value="lab">lab (berat, desktop saja)</option>
+        <option value="lite">lite (ikut mode lite dan lab)</option>
+      </select>
+
+      <div class="two">
+        <div>
+          <label for="mem">mem_limit</label>
+          <input id="mem" name="mem" value="128m">
+        </div>
+        <div>
+          <label for="cpus">cpus</label>
+          <input id="cpus" name="cpus" value="0.25">
+        </div>
+      </div>
+
+      <label for="volumes">Volume (satu per baris, host:container)</label>
+      <textarea id="volumes" name="volumes" rows="3" placeholder="/srv/data:/data"></textarea>
+
+      <div class="form-actions">
+        <button type="submit" class="btn">Buat file compose</button>
+      </div>
+    </form>
+  </div>
+</section>
+{{template "footer" .}}

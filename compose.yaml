@@ -1,0 +1,84 @@
+name: infra
+
+include:
+  - stacks/whoami/compose.yaml
+  - stacks/postgres-lite/compose.yaml
+  - stacks/portal/compose.yaml
+
+networks:
+  proxy: {}
+  internal:
+    internal: true
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  traefik:
+    image: traefik:v3.6
+    profiles: ["lite", "lab"]
+    restart: unless-stopped
+    command: --configFile=/etc/traefik/traefik.yml
+    ports:
+      # Hanya localhost — TIDAK pernah 0.0.0.0 (publik via cloudflared saja)
+      - "127.0.0.1:80:80"
+      - "127.0.0.1:8080:8080"
+      # Akses dari device lain via Tailscale (opsional, uncomment bila perlu):
+      # - "100.118.233.127:8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./traefik/dynamic:/etc/traefik/dynamic:ro
+      - ./traefik/certs:/etc/traefik/certs:ro # mkcert nanti (*.lan)
+    networks: [proxy]
+    mem_limit: 256m
+    cpus: 0.5
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  cloudflared:
+    image: cloudflare/cloudflared:2026.8.3
+    profiles: ["lite", "lab"]
+    restart: unless-stopped
+    command: tunnel --config /etc/cloudflared/config.yml run
+    # Image default uid 65532 tidak bisa baca secrets 600 milik user → jalankan sebagai user host
+    user: "${PUID:-1000}:${PGID:-1000}"
+    volumes:
+      - ./secrets/cf-tunnel.yml:/etc/cloudflared/config.yml:ro
+    # Ingress tunnel lama pakai localhost:PORT — dari dalam container itu bukan host
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks: [proxy]
+    depends_on: [traefik]
+    mem_limit: 192m
+    cpus: 0.25
+    logging: *default-logging
+    # Tanpa healthcheck: image distroless (tidak ada sh/wget/curl).
+    # Monitoring: `./mode status` + Cloudflare Zero Trust → Tunnels.
+
+  # Privasi ketat: hanya entrypoint `traefik` (127.0.0.1:8080) — tidak pernah masuk tunnel.
+  # Justifikasi docker.sock (root-equivalent): viewer log lab-only, mati saat mode desktop/lite.
+  dozzle:
+    image: amir20/dozzle:v11.1.2
+    profiles: ["lab"]
+    restart: "no"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [proxy]
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dozzle.rule=Host(`dozzle.lan`)"
+      - "traefik.http.routers.dozzle.entrypoints=traefik"
+      - "traefik.http.services.dozzle.loadbalancer.server.port=8080"
+    mem_limit: 128m
+    cpus: 0.25
+    logging: *default-logging
+    # Tanpa healthcheck: image distroless (tidak ada sh/wget/curl).

@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# infra mode switcher — desktop | lite | lab | status
+# desktop: semua container DOWN (tanpa -v, data & secrets tetap)
+# lite    : traefik + cloudflared + service profile lite (publik aktif)
+# lab     : lite + dozzle + postgres-lite
+set -euo pipefail
+
+cd "$(dirname "$(readlink -f "$0")")"
+
+usage() {
+  cat <<'EOF'
+Pemakaian: ./mode desktop|lite|lab|status
+
+  desktop  Semua container stop+hapus (TANPA -v) — hemat resource, publik OFF
+  lite     traefik + cloudflared + service profile lite — publik ON
+  lab      lite + dozzle + postgres-lite
+  status   df, free, docker compose ls/ps, docker system df
+
+Catatan:
+  - mode desktop & lite juga menonaktifkan akses publik (cloudflared ikut down).
+  - public/private switch = ganti mode, bukan edit compose.
+EOF
+  exit "${1:-2}"
+}
+
+require_docker() {
+  command -v docker >/dev/null || { echo "docker tidak ditemukan" >&2; exit 1; }
+  docker info >/dev/null 2>&1 || { echo "daemon docker tidak jalan / butuh sudo" >&2; exit 1; }
+}
+
+cmd="${1:-}"
+case "$cmd" in
+  desktop)
+    require_docker
+    docker compose --profile lite --profile lab down
+    ;;
+  lite)
+    require_docker
+    docker compose --profile lite up -d
+    ;;
+  lab)
+    require_docker
+    docker compose --profile lite --profile lab up -d
+    ;;
+  status)
+    require_docker
+    df -h / /boot
+    echo
+    free -h
+    echo
+    docker compose ls
+    echo
+    docker compose --profile lite --profile lab ps -a
+    echo
+    docker system df
+    ;;
+  *)
+    usage
+    ;;
+esac

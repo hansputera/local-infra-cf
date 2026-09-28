@@ -1,0 +1,11 @@
+# Rahasia & data — JANGAN PERNAH commit
+.env
+secrets/
+data/
+
+# Sertifikat lokal (mkcert)
+*.pem
+*.crt
+*.key
+acme/
+traefik/certs/

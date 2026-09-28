@@ -76,13 +76,13 @@ type Report struct {
 	Checked  time.Time       `json:"checked_at"`
 }
 
-// Reconcile menyesuaikan service tunggal ke tiga tempat: file traefik,
-// ingress tunnel CF, DNS CNAME. Urutan: traefik dulu (origin siap),
-// baru CF (hostname mulai resolve), terakhir DNS.
+// Reconcile aligns a single service across three places: the traefik file,
+// the CF tunnel ingress, DNS CNAME. Order: traefik first (origin ready),
+// then CF (hostname starts resolving), DNS last.
 func (e *Engine) Reconcile(ctx context.Context, name string) error {
 	svc, ok := e.Reg.Get(name)
 	if !ok {
-		return fmt.Errorf("service %q tidak ada di registry", name)
+		return fmt.Errorf("service %q not in the registry", name)
 	}
 	return e.apply(ctx, *svc)
 }
@@ -99,29 +99,29 @@ func (e *Engine) ReconcileAll(ctx context.Context) []error {
 }
 
 func (e *Engine) apply(ctx context.Context, svc registry.Service) error {
-	// Bila hostname sudah dipegang label compose (provider docker), jangan tulis
-	// file dynamic: dua router dengan rule sama = ambiguitas di traefik.
-	// File lama (misal tertulis saat router docker sempat hilang saat restart)
-	// dibersihkan supaya tidak jadi duplikat.
+	// When the hostname is already claimed by a compose label (docker provider),
+	// do not write a dynamic file: two routers with the same rule = ambiguity in
+	// traefik. Old files (e.g. written while the docker router briefly vanished
+	// on restart) are cleaned up so no duplicate remains.
 	if routing, _ := e.routingFor(ctx, svc.Hostname); routing == RoutingLabel {
 		if err := e.TR.RemoveRouter(svc.Name); err != nil {
-			return fmt.Errorf("bersihkan file traefik ganda: %w", err)
+			return fmt.Errorf("clean up duplicate traefik file: %w", err)
 		}
 		return e.syncCF(ctx, svc)
 	}
 	if err := e.TR.WriteRouter(svc.Name, svc.Hostname, svc.Port, "web", svc.Target); err != nil {
-		return fmt.Errorf("tulis router traefik: %w", err)
+		return fmt.Errorf("write traefik router: %w", err)
 	}
 	if svc.Target != "" && svc.Target != "traefik" {
 		if err := e.DK.ConnectNetwork(ctx, "infra_proxy", svc.Target); err != nil {
-			// non-fatal: container mungkin sudah di jaringan atau sedang mati
+			// non-fatal: the container may already be on the network or stopped
 			_ = err
 		}
 	}
 	return e.syncCF(ctx, svc)
 }
 
-// tunnelOf: tunnel tempat hostname ini di-serve. Kosong = tunnel infra.
+// tunnelOf: tunnel this hostname is served on. Empty = the infra tunnel.
 func (e *Engine) tunnelOf(svc registry.Service) string {
 	if svc.TunnelID != "" {
 		return svc.TunnelID
@@ -129,8 +129,8 @@ func (e *Engine) tunnelOf(svc registry.Service) string {
 	return e.Cfg.CFTunnelID
 }
 
-// originOf: service string ingress. Prioritas: origin service > origin node >
-// PUBLIC_ORIGIN (default: traefik di host ini).
+// originOf: the ingress service string. Priority: service origin > node origin >
+// PUBLIC_ORIGIN (default: traefik on this host).
 func (e *Engine) originOf(svc registry.Service) string {
 	if svc.Origin != "" {
 		return svc.Origin
@@ -183,9 +183,9 @@ const (
 	RoutingNone  = ""
 )
 
-// routedByLabel: hostname ini diklaim lewat label traefik di compose?
-// Sumber kebenaran lebih stabil daripada keberadaan router (router docker
-// bisa hilang sesaat saat container restart).
+// routedByLabel: is this hostname claimed by a traefik compose label?
+// That source of truth is more stable than the router's presence (a docker
+// router can vanish briefly while a container restarts).
 func (e *Engine) routedByLabel(ctx context.Context, hostname string) bool {
 	want := "host(`" + strings.ToLower(hostname) + "`)"
 	for _, c := range e.containers(ctx) {
@@ -201,8 +201,8 @@ func (e *Engine) routedByLabel(ctx context.Context, hostname string) bool {
 	return false
 }
 
-// purgeDupFiles hapus file dynamic untuk hostname yang juga sudah dipegang
-// label compose (router ganda @docker + @file).
+// purgeDupFiles removes dynamic files for hostnames also claimed by compose
+// labels (duplicate @docker + @file routers).
 func (e *Engine) purgeDupFiles(ctx context.Context) {
 	hosts, err := e.TR.Hosts(ctx)
 	if err != nil {
@@ -229,7 +229,7 @@ func (e *Engine) purgeDupFiles(ctx context.Context) {
 	}
 }
 
-// routingFor: file = ditulis portal, label = dipegang traefik docker provider.
+// routingFor: file = written by the portal, label = held by the traefik docker provider.
 func (e *Engine) routingFor(ctx context.Context, hostname string) (string, string) {
 	if e.routedByLabel(ctx, hostname) {
 		return RoutingLabel, ""
@@ -249,35 +249,35 @@ func (e *Engine) routingFor(ctx context.Context, hostname string) (string, strin
 	return RoutingNone, ""
 }
 
-// Remove membalik reconcile: file traefik, ingress CF, lalu DNS, baru registry.
-// Mengembalikan peringatan bila routing masih dipegang label compose.
+// Remove reverses reconcile: traefik file, CF ingress, then DNS, registry last.
+// Returns a warning when routing is still held by a compose label.
 func (e *Engine) Remove(ctx context.Context, name string) (string, error) {
 	svc, ok := e.Reg.Get(name)
 	if !ok {
-		return "", fmt.Errorf("service %q tidak ada di registry", name)
+		return "", fmt.Errorf("service %q not in the registry", name)
 	}
 	warn := ""
 	if routing, _ := e.routingFor(ctx, svc.Hostname); routing == RoutingLabel {
-		warn = "router milik label compose masih aktif di traefik; hapus label traefik di compose service itu bila benar-benar mau dimatikan"
+		warn = "the compose-label router is still active in traefik; remove the traefik label on that compose service if you really want it off"
 	} else if err := e.TR.RemoveRouter(svc.Name); err != nil {
-		return "", fmt.Errorf("hapus file traefik: %w", err)
+		return "", fmt.Errorf("remove traefik file: %w", err)
 	}
 	if svc.Kind == registry.KindPublic {
 		if _, err := e.CF.MutateIngressTunnel(ctx, e.tunnelOf(*svc), func(rules []cfclient.IngressRule) ([]cfclient.IngressRule, error) {
 			return cfclient.RemoveHostname(rules, svc.Hostname), nil
 		}); err != nil {
-			return "", fmt.Errorf("hapus ingress: %w", err)
+			return "", fmt.Errorf("remove ingress: %w", err)
 		}
 		if err := e.CF.DeleteDNSByName(ctx, svc.Hostname); err != nil {
-			return "", fmt.Errorf("hapus dns: %w", err)
+			return "", fmt.Errorf("remove dns: %w", err)
 		}
 	}
 	return warn, e.Reg.Delete(name)
 }
 
-// Status membandingkan registry vs kenyataan (CF + traefik + docker),
-// lalu probe HTTPS bila disetel. Ingress diperiksa per tunnel yang dipakai
-// service (multi-tunnel), DNS diperiksa arah CNAME-nya.
+// Status compares the registry against reality (CF + traefik + docker), then
+// probes HTTPS when enabled. Ingress is checked on the tunnel each service
+// uses (multi-tunnel); DNS is checked for CNAME direction.
 func (e *Engine) Status(ctx context.Context, probe bool) (Report, error) {
 	rep := Report{Checked: time.Now().UTC(), Services: []ServiceStatus{}, Orphans: []Orphan{}}
 
@@ -294,7 +294,7 @@ func (e *Engine) Status(ctx context.Context, probe bool) (Report, error) {
 		containers = nil
 	}
 
-	// tunnel yang harus dicek: infra + semua tunnel yang dirujuk service publik
+	// tunnels to check: infra + every tunnel referenced by a public service
 	tunnelIDs := []string{e.Cfg.CFTunnelID}
 	seenT := map[string]bool{e.Cfg.CFTunnelID: true}
 	for _, svc := range e.Reg.List() {
@@ -315,7 +315,7 @@ func (e *Engine) Status(ctx context.Context, probe bool) (Report, error) {
 			if tid == e.Cfg.CFTunnelID {
 				return rep, err
 			}
-			rep.Warnings = append(rep.Warnings, "ingress tunnel "+short(tid)+" gagal dibaca: "+err.Error())
+			rep.Warnings = append(rep.Warnings, "failed to read ingress of tunnel "+short(tid)+": "+err.Error())
 			continue
 		}
 		m := map[string]string{}
@@ -327,12 +327,12 @@ func (e *Engine) Status(ctx context.Context, probe bool) (Report, error) {
 		ingressByTunnel[tid] = m
 	}
 
-	// koneksi live per tunnel: dipakai cek status node
+	// live connections per tunnel: used for node status checks
 	liveClient := map[string]bool{}
 	for _, tid := range tunnelIDs {
 		groups, err := e.CF.ConnectionsForTunnel(ctx, tid)
 		if err != nil {
-			rep.Warnings = append(rep.Warnings, "koneksi tunnel "+short(tid)+" gagal dibaca: "+err.Error())
+			rep.Warnings = append(rep.Warnings, "failed to read connections of tunnel "+short(tid)+": "+err.Error())
 			continue
 		}
 		for _, g := range groups {
@@ -353,7 +353,7 @@ func (e *Engine) Status(ctx context.Context, probe bool) (Report, error) {
 		hostSet[h.Hostname] = h
 	}
 
-	// nama tunnel di-cache (hindari query list tunnel berulang)
+	// cache tunnel names (avoid repeated tunnel-list queries)
 	tunnelNames := map[string]string{e.Cfg.CFTunnelID: "infra"}
 	if list, err := e.CF.ListTunnels(ctx); err == nil {
 		for _, t := range list {
@@ -382,10 +382,10 @@ func (e *Engine) Status(ctx context.Context, probe bool) (Report, error) {
 				st.NodeName = nd.Name
 				st.NodeConnected = liveClient[nd.ClientID]
 				if !st.NodeConnected {
-					st.Drift = append(st.Drift, "node "+nd.Name+" ("+short(nd.ClientID)+") tidak tersambung ke tunnel "+short(tid))
+					st.Drift = append(st.Drift, "node "+nd.Name+" ("+short(nd.ClientID)+") is not connected to tunnel "+short(tid))
 				}
 			} else {
-				st.Drift = append(st.Drift, "node_id "+short(svc.NodeID)+" tidak ada di registry node")
+				st.Drift = append(st.Drift, "node_id "+short(svc.NodeID)+" is not in the node registry")
 			}
 		}
 
@@ -397,37 +397,37 @@ func (e *Engine) Status(ctx context.Context, probe bool) (Report, error) {
 		if h, ok := hostSet[svc.Hostname]; ok {
 			if h.Provider == "docker" {
 				st.Routing = RoutingLabel
-				st.Hints = append(st.Hints, "routing dipegang label compose; ubah port lewat label, bukan form portal")
+				st.Hints = append(st.Hints, "routing is held by compose labels; change the port via labels, not the portal form")
 			} else {
 				st.Routing = RoutingFile
 			}
 		}
 
 		if !st.Traefik {
-			st.Drift = append(st.Drift, "router traefik hilang (file svc-"+svc.Name+".yml tidak terbaca)")
+			st.Drift = append(st.Drift, "traefik router missing (file svc-"+svc.Name+".yml not readable)")
 		}
 		if svc.Kind == registry.KindPublic {
 			if !st.CFIngress {
-				st.Drift = append(st.Drift, "hostname tidak ada di ingress tunnel "+short(tid))
+				st.Drift = append(st.Drift, "hostname missing from ingress of tunnel "+short(tid))
 			} else if got := ingressMap[stringToLower(svc.Hostname)]; !strings.EqualFold(got, origin) {
-				st.Drift = append(st.Drift, "origin ingress ("+got+") beda dari pilihan portal ("+origin+")")
+				st.Drift = append(st.Drift, "ingress origin ("+got+") differs from the portal choice ("+origin+")")
 			}
 			if !st.DNS {
-				st.Drift = append(st.Drift, "CNAME DNS tidak ada")
+				st.Drift = append(st.Drift, "DNS CNAME missing")
 			} else if want := tid + ".cfargotunnel.com"; !strings.EqualFold(dnsContent[stringToLower(svc.Hostname)], want) {
-				st.Drift = append(st.Drift, "CNAME mengarah ke "+dnsContent[stringToLower(svc.Hostname)]+", seharusnya "+want)
+				st.Drift = append(st.Drift, "CNAME points to "+dnsContent[stringToLower(svc.Hostname)]+", should be "+want)
 			}
 		}
 		if st.Container == "stopped" {
-			st.Drift = append(st.Drift, "container "+svc.Target+" berhenti")
+			st.Drift = append(st.Drift, "container "+svc.Target+" is stopped")
 		}
 		if st.Container == "missing" {
-			st.Drift = append(st.Drift, "container "+svc.Target+" tidak ditemukan")
+			st.Drift = append(st.Drift, "container "+svc.Target+" not found")
 		}
 		rep.Services = append(rep.Services, st)
 	}
 
-	// Probe HTTPS paralel: N host x timeout tunggal bisa berputar lama.
+	// HTTPS probes in parallel: N hosts x one timeout could take forever.
 	if probe {
 		type res struct {
 			idx  int
@@ -453,9 +453,9 @@ func (e *Engine) Status(ctx context.Context, probe bool) (Report, error) {
 			st.ProbeCode = r.code
 			st.ProbeErr = r.err
 			if r.code >= 500 {
-				st.Drift = append(st.Drift, fmt.Sprintf("origin balas HTTP %d", r.code))
+				st.Drift = append(st.Drift, fmt.Sprintf("origin answered HTTP %d", r.code))
 			} else if r.code == 0 {
-				st.Drift = append(st.Drift, "probe gagal: "+r.err)
+				st.Drift = append(st.Drift, "probe failed: "+r.err)
 			}
 		}
 	}
@@ -477,12 +477,12 @@ func (e *Engine) Status(ctx context.Context, probe bool) (Report, error) {
 	return rep, nil
 }
 
-// Adopt mendaftarkan hostname yang sudah ada (milik portal dulu / manual)
-// ke registry supaya dikelola, tanpa mengubah CF.
+// Adopt registers an existing hostname (once portal-owned / manual) into the
+// registry so it gets managed, without changing CF.
 func (e *Engine) Adopt(ctx context.Context, hostname string) (*registry.Service, error) {
 	hostname = strings.ToLower(strings.TrimSpace(hostname))
 	if _, ok := e.Reg.FindByHostname(hostname); ok {
-		return nil, fmt.Errorf("%s sudah terdaftar", hostname)
+		return nil, fmt.Errorf("%s is already registered", hostname)
 	}
 	hosts, err := e.TR.Hosts(ctx)
 	if err != nil {
@@ -496,7 +496,7 @@ func (e *Engine) Adopt(ctx context.Context, hostname string) (*registry.Service,
 		}
 	}
 	if found == nil {
-		return nil, fmt.Errorf("tidak ada router traefik untuk %s", hostname)
+		return nil, fmt.Errorf("no traefik router for %s", hostname)
 	}
 	kind := registry.KindPublic
 	if rules, _, err := e.CF.GetIngress(ctx); err == nil {

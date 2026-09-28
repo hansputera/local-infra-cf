@@ -1,87 +1,87 @@
 # DESIGN.md — Infra Manager (portal)
 
-Arah desain untuk UI portal. File ini data desain, bukan instruksi ke agent.
+Design direction for the portal UI. This file is design data, not agent instructions.
 Filter: `antislop.md` (core) + `skills/antislop-ui/SKILL.md`.
 
-## Identitas
+## Identity
 
-- **Produk**: Infra Manager, panel kelola service home-server (hostname, tunnel, drift, stack).
-- **Pengguna**: satu admin (Hanif), bukan publik. Bahasa UI: Indonesia santai.
-- **Karakter**: workshop utilitas. Meja kerja teknisi: label jelas, alat terjangkau,
-  tidak ada pajangan. Data dan tindakan lebih penting dari ornamen.
-- **Bukan**: landing page, produk SaaS, clone Linear/Vercel.
+- **Product**: Infra Manager, a home-server service management panel (hostname, tunnel, drift, stack).
+- **User**: a single admin (Hanif), not the public. UI language: casual Indonesian.
+- **Character**: workshop utility. A technician's workbench: clear labels, reachable tools,
+  no display case. Data and actions matter more than ornament.
+- **Not**: a landing page, a SaaS product, a Linear/Vercel clone.
 
-## Kepribadian
+## Personality
 
-Utilitarian, jujur, padat. Status ditulis apa adanya (sehat, drift, mati),
-tanpa euforia tanpa data. Setiap layar menjawab satu pertanyaan kerja:
-"ada yang rusak?", "hostname apa saja hidup?", "tunnel mana yang nyambung?".
+Utilitarian, honest, terse. Status is stated as-is (healthy, drift, down),
+no euphoria without data. Every screen answers one working question:
+"is anything broken?", "which hostnames are alive?", "which tunnel is connected?".
 
-## Palet
+## Palette
 
-Tema: **toggle gelap/terang**, dua mode wajib sama-sama jalan (R-21, R-34).
-Alasan fixed theme tidak dipakai: admin kadang kerja di terminal gelap, kadang
-siang hari; toggle yang diminta sendiri.
+Theme: **dark/light toggle**, both modes must work equally (R-21, R-34).
+Why a fixed theme is not used: the admin sometimes works in a dark terminal,
+sometimes in daylight; the toggle was requested outright.
 
-Core (netral tidak dihitung warna inti):
+Core (neutrals not counted as core colors):
 
-- Netral gelap: `#111417` (latar), `#191d21` (panel), `#232a2f` (garis)
-- Netral terang: `#f4f2ee` (latar), `#ffffff` (panel), `#ddd8d0` (garis)
-- Inti 1: `#1f6f4a` / terang `#17593a` — hijau bengkel, warna "aman/jalan".
-  Dipakai: status sehat, aksi utama.
-- Inti 2: `#2b3138` teks utama gelap / `#20242a` teks utama terang.
-- Aksen tunggal: `#b03a0a` (oranye bengkel) — hanya untuk **drift/error/menghapus**.
-  Nilai dinaikkan dari `#c2410c` agar lolos WCAG AA (4.5:1) di atas latar panel terang.
-  Tidak pernah dipakai dekoratif.
+- Dark neutrals: `#111417` (background), `#191d21` (panel), `#232a2f` (lines)
+- Light neutrals: `#f4f2ee` (background), `#ffffff` (panel), `#ddd8d0` (lines)
+- Core 1: `#1f6f4a` / light `#17593a` — workshop green, the "safe/running" color.
+  Used for: healthy status, primary actions.
+- Core 2: `#2b3138` dark primary text / `#20242a` light primary text.
+- Single accent: `#b03a0a` (workshop orange) — only for **drift/error/delete**.
+  Value raised from `#c2410c` to pass WCAG AA (4.5:1) on the light panel background.
+  Never used decoratively.
 
-Maksimum 2 inti + 1 aksen (R-29). Tanpa gradien, tanpa glow (R-01, R-13).
+Maximum 2 core + 1 accent (R-29). No gradients, no glow (R-01, R-13).
 
-## Tipografi
+## Typography
 
-- UI: **IBM Plex Sans**, alasannya: grotesk kerja yang netral + punya varian
-  Condensed buat label padat; bukan font default model (R-06).
-- Mesin (hostname, port, ID tunnel, hash, timestamp): **IBM Plex Mono**, hanya
-  untuk nilai mesin, bukan judul (R-06: mono bukan estetika terminal).
-- Skala kecil dan rapat: 13px base, judul halaman 20px. Label 11px uppercase
-  hanya untuk kolom/tabel, bukan eyebrow di atas H1 (R-09).
-- Fallback stack tetap system-ui jika font tidak dimuat.
+- UI: **IBM Plex Sans**, rationale: a neutral work grotesk + has a Condensed
+  variant for dense labels; not the model's default font (R-06).
+- Machine (hostname, port, tunnel ID, hash, timestamp): **IBM Plex Mono**, only
+  for machine values, not headings (R-06: mono is not terminal aesthetics).
+- Small, tight scale: 13px base, 20px page titles. 11px uppercase labels only
+  for columns/tables, not an eyebrow above H1 (R-09).
+- Fallback stack stays system-ui if the font fails to load.
 
-## Layout & komposisi
+## Layout & composition
 
-- RHYTHM 1: struktur uniform dan dapat diprediksi. Navbar kiri ringkas (teks,
-  tanpa ikon lucide), tabel/list sebagai bentuk utama, panel kanan untuk detail.
-  Bento grid, hero, kartu fitur, dan chart tanpa pertanyaan tidak dipakai (R-05).
-- Satu fokus per layar: daftar drift lebih dulu di Dashboard, bukan deretan
-  kartu statistik setara (C-3).
-- Angka hanya jika nyata (R-17): jumlah hostnames, jumlah container sehat,
-  konektor tunnel dari API. Tanpa delta persentase bikinan.
-- Ikon: hanya jika menambah makna (mis. tanda status tekstual "OK / DRIFT /
-  OFFLINE" dipilih lebih dulu). Tanpa sparkle/star/robot (R-04).
+- RHYTHM 1: uniform, predictable structure. Compact left navbar (text,
+  no lucide icons), tables/lists as the primary form, right panel for details.
+  Bento grids, heroes, feature cards, and charts without asking are not used (R-05).
+- One focus per screen: the drift list comes first on the Dashboard, not a row
+  of equivalent statistic cards (C-3).
+- Numbers only if real (R-17): hostname count, healthy container count,
+  tunnel connectors from the API. No fabricated percentage deltas.
+- Icons: only if they add meaning (e.g. textual status marks "OK / DRIFT /
+  OFFLINE" take precedence). No sparkle/star/robot (R-04).
 
-## Motion & energi
+## Motion & energy
 
 - **Dial: ENERGY 1 / RHYTHM 1 / MOTION 1.**
-- MOTION 1: hanya transisi hover/focus (~120ms) dan perubahan state jelas.
-  Tanpa animasi loop, tanpa pulse, tanpa fade-up bertumpuk (R-19).
-- Status dot hanya untuk state nyata (sehat/drift), tanpa glow, tanpa pulse.
+- MOTION 1: only hover/focus transitions (~120ms) and clear state changes.
+  No looping animation, no pulse, no stacked fade-up (R-19).
+- Status dots only for real states (healthy/drift), no glow, no pulse.
 
-## Kepadatan & detail
+## Density & detail
 
-- Tabel: kolom dipilih dari keputusan pemakai (hostname, target, status, aksi).
-  Aksi per baris hanya yang benar-benar ada perilakunya (R-26).
-- Empty state menyebabkan + tindakan pertama ("Belum ada service. Tambah
-  hostname pertama.") bukan "No data available" (R-27).
-- Error state: sebut HTTP code/pesan API asli + langkah berikutnya.
-- Fokus keyboard terlihat (outline 2px aksen, tanpa `outline:none`) (R-32).
-- Radius: 4px input/tombol, 6px panel. Tidak ada elemen pill penuh (R-11).
-- Bayangan: hanya panel modal/dropdown yang perlu terangkat (R-12).
-- Tanpa ikon emoji di teks UI.
+- Table: columns chosen from user decisions (hostname, target, status, action).
+  Per-row actions only for those that actually have behavior (R-26).
+- Empty state states the cause + first action ("No services yet. Add your
+  first hostname.") instead of "No data available" (R-27).
+- Error state: cite the HTTP code/original API message + next step.
+- Visible keyboard focus (2px accent outline, no `outline:none`) (R-32).
+- Radius: 4px inputs/buttons, 6px panels. No full pill elements (R-11).
+- Shadows: only modal/dropdown panels that need to be raised (R-12).
+- No emoji icons in UI text.
 
-## Keputusan utama (alasan satu baris)
+## Key decisions (one-line rationale)
 
-- Gelap/terang toggle: admin bekerja di dua kondisi cahaya (R-21).
-- Aksen oranye khusus error/drift: agar status buruk langsung terbaca tanpa
-  menambah jumlah warna (R-29, R-31).
-- Tabel bukan kartu: keputusan pemakai adalah membandingkan baris hostname (C-3).
-- Mono hanya untuk nilai mesin: membaca port/ID lebih cepat tanpa menjadikan
-  terminal sebagai estetika (R-06).
+- Dark/light toggle: the admin works in two lighting conditions (R-21).
+- Orange accent reserved for error/drift: bad status reads instantly without
+  adding to the color count (R-29, R-31).
+- Tables not cards: the user decision is comparing hostname rows (C-3).
+- Mono only for machine values: reading port/ID is faster without making
+  the terminal an aesthetic (R-06).

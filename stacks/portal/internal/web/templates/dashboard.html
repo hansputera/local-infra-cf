@@ -1,18 +1,18 @@
 {{template "header" .}}
 <h1>Dashboard</h1>
-<p class="sub">Sinkronisasi hostname antara registry portal, Cloudflare Tunnel, DNS, dan Traefik.</p>
+<p class="sub">Hostname sync between the portal registry, Cloudflare Tunnel, DNS and Traefik.</p>
 
 <section class="row2">
   <div class="panel">
     <div class="panel-head">
       <h2>Drift</h2>
-      <button type="button" class="ghost" id="refresh-drift">Muat ulang status</button>
+      <button type="button" class="ghost" id="refresh-drift">Refresh status</button>
     </div>
     <div id="live" data-state="ok">
       {{if eq (len .Report.Services) 0}}
-        <p class="empty">Belum ada service terdaftar. <a href="/services/new">Tambah hostname pertama</a>.</p>
+        <p class="empty">No services registered yet. <a href="/services/new">Add your first hostname</a>.</p>
       {{else if eq (len .DriftCount) 0}}
-        <p class="empty ok-text">Tidak ada drift. Semua hostname cocok dengan Cloudflare Tunnel dan Traefik. Diperiksa {{.Report.Checked.Format "15:04:05"}}.</p>
+        <p class="empty ok-text">No drift. Every hostname matches Cloudflare Tunnel and Traefik. Checked {{.Report.Checked.Format "15:04:05"}}.</p>
       {{else}}
         <ul class="drift-list">
           {{range .Report.Services}}{{if .Drift}}
@@ -25,7 +25,7 @@
               {{range .Drift}}<li>{{.}}</li>{{end}}
             </ul>
             <form method="post" action="/services/{{.Name}}/reconcile" class="inline">
-              <button type="submit" class="small">Sinkronkan ulang</button>
+              <button type="submit" class="small">Re-sync</button>
             </form>
           </li>
           {{end}}{{end}}
@@ -35,26 +35,26 @@
   </div>
 
   <div class="panel">
-    <h2>Ringkasan</h2>
+    <h2>Summary</h2>
     <dl class="stats">
-      <div><dt>Hostname terdaftar</dt><dd class="mono">{{len .Report.Services}}</dd></div>
-      <div><dt>Publik</dt><dd class="mono">{{.Counts.Public}}</dd></div>
-      <div><dt>Privat</dt><dd class="mono">{{.Counts.Private}}</dd></div>
+      <div><dt>Registered hostnames</dt><dd class="mono">{{len .Report.Services}}</dd></div>
+      <div><dt>Public</dt><dd class="mono">{{.Counts.Public}}</dd></div>
+      <div><dt>Private</dt><dd class="mono">{{.Counts.Private}}</dd></div>
       <div><dt>Drift</dt><dd class="mono {{if .Counts.Drift}}bad{{end}}">{{.Counts.Drift}}</dd></div>
-      <div><dt>Konektor tunnel</dt><dd class="mono {{if eq .Conns 0}}bad{{end}}">{{.Conns}}</dd></div>
+      <div><dt>Tunnel connectors</dt><dd class="mono {{if eq .Conns 0}}bad{{end}}">{{.Conns}}</dd></div>
     </dl>
     <p class="note mono">tunnel {{.TunnelIDShort}}</p>
-    <p class="note">Origin ingress: <span class="mono">{{.Origin}}</span></p>
+    <p class="note">Ingress origin: <span class="mono">{{.Origin}}</span></p>
   </div>
 </section>
 
 <section class="panel">
-  <h2>Hostname di luar registry</h2>
+  <h2>Hostnames outside the registry</h2>
   {{if eq (len .Report.Orphans) 0}}
-    <p class="empty">Tidak ada hostname liar. Semua ingress tunnel dan router traefik tercatat di registry.</p>
+    <p class="empty">No stray hostnames. Every tunnel ingress and traefik router is recorded in the registry.</p>
   {{else}}
     <table>
-      <thead><tr><th>Hostname</th><th>Sumber</th><th>Target</th><th>Aksi</th></tr></thead>
+      <thead><tr><th>Hostname</th><th>Source</th><th>Target</th><th>Action</th></tr></thead>
       <tbody>
         {{range .Report.Orphans}}
         <tr>
@@ -71,10 +71,10 @@
         {{end}}
       </tbody>
     </table>
-    <p class="note">Adopt mencatat hostname ke registry lalu mengelolanya (registry selalu cocok, bukan menghapus).</p>
+    <p class="note">Adopt records the hostname into the registry and then manages it (registry always matches — it never deletes).</p>
   {{end}}
   {{if .PendingSelf}}
-    <p class="note">Hostname portal sendiri (<span class="mono">portal.{{.Domain}}</span>) sengaja belum terdaftar: menunggu Cloudflare Access dipasang agar panel tidak terbuka publik tanpa login.</p>
+    <p class="note">The portal's own hostname (<span class="mono">portal.{{.Domain}}</span>) is deliberately not registered yet: waiting for Cloudflare Access so the panel is never open to the public without a login.</p>
   {{end}}
 </section>
 {{template "footer" .}}

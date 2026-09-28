@@ -77,13 +77,13 @@ type Endpoint struct {
 }
 
 type Container struct {
-	ID      string            `json:"Id"`
-	Names   []string          `json:"Names"`
-	Image   string            `json:"Image"`
-	State   string            `json:"State"`
-	Status  string            `json:"Status"`
-	Labels  map[string]string `json:"Labels"`
-	// Networks ada di bawah NetworkSettings di respons /containers/json
+	ID     string            `json:"Id"`
+	Names  []string          `json:"Names"`
+	Image  string            `json:"Image"`
+	State  string            `json:"State"`
+	Status string            `json:"Status"`
+	Labels map[string]string `json:"Labels"`
+	// Networks lives under NetworkSettings in the /containers/json response
 	NetworkSettings struct {
 		Networks map[string]Endpoint `json:"Networks"`
 	} `json:"NetworkSettings"`
@@ -125,9 +125,9 @@ func (c *Client) Containers(ctx context.Context, all bool) ([]Container, error) 
 }
 
 type Network struct {
-	Name   string
-	ID     string
-	Driver string
+	Name     string
+	ID       string
+	Driver   string
 	Internal bool
 }
 
@@ -139,11 +139,11 @@ func (c *Client) Networks(ctx context.Context) ([]Network, error) {
 	return out, nil
 }
 
-// Connect ke jaringan compose bila container belum ada di sana (idempoten).
-// Traefik hanya bisa reach container yang berada di network `proxy`.
+// ConnectNetwork joins the compose network when the container is not on it yet
+// (idempotent). Traefik can only reach containers on the `proxy` network.
 func (c *Client) ConnectNetwork(ctx context.Context, network, container string) error {
 	body := map[string]any{
-		"Container":   container,
+		"Container":      container,
 		"EndpointConfig": map[string]any{},
 	}
 	err := c.do(ctx, http.MethodPost, "/networks/"+network+"/connect", body, nil)
@@ -153,8 +153,8 @@ func (c *Client) ConnectNetwork(ctx context.Context, network, container string) 
 	return err
 }
 
-// FindContainerByIP cari container berdasarkan IP di jaringan mana pun
-// (dipakai saat Adopt: traefik loadbalancer memberi URL IP:port).
+// FindContainerByIP finds a container by IP on any network (used during Adopt:
+// the traefik load balancer hands out an IP:port URL).
 func FindContainerByIP(containers []Container, ip string) (Container, bool) {
 	for _, c := range containers {
 		for _, ep := range c.NetworkSettings.Networks {

@@ -1,106 +1,106 @@
 # infra — Docker Compose v2 (project `infra`)
 
-Home-server infra di Arch Linux (ASUS TUF F15). Satu project Compose,
-tiga mode lewat profile, ingress Traefik v3 + Cloudflare Tunnel.
+Home-server infra on Arch Linux (ASUS TUF F15). One Compose project,
+three modes via profiles, Traefik v3 + Cloudflare Tunnel ingress.
 
-## Mode
+## Modes
 
-| Mode     | Command           | Isi                                          | Resource cap | Publik |
+| Mode     | Command           | Contents                                     | Resource cap | Public |
 |----------|-------------------|----------------------------------------------|--------------|--------|
-| desktop  | `./mode desktop`  | semua DOWN (`down` tanpa `-v`)               | 0 (reserved 8–10G untuk dev) | OFF |
+| desktop  | `./mode desktop`  | everything DOWN (`down` without `-v`)         | 0 (8–10G reserved for dev) | OFF |
 | lite     | `./mode lite`     | traefik + cloudflared + whoami + portal      | ≤ 5G         | ON     |
 | lab      | `./mode lab`      | lite + dozzle + postgres-lite                | ≤ 10G        | ON     |
 
-- `restart: unless-stopped` untuk service lite; `"no"` untuk lab-only (dozzle, postgres).
-- Semua service punya `mem_limit` + `cpus`.
-- `desktop` TIDAK pakai `-v` — data & secrets tidak pernah dihapus oleh mode switch.
+- `restart: unless-stopped` for lite services; `"no"` for lab-only (dozzle, postgres).
+- Every service has `mem_limit` + `cpus`.
+- `desktop` does NOT use `-v` — data & secrets are never deleted by mode switches.
 
 ## Public vs Private
 
-| Service            | Router                      | Akses                                  |
+| Service            | Router                      | Access                                 |
 |--------------------|-----------------------------|----------------------------------------|
-| whoami             | `Host(whoami.<PUBLIC_DOMAIN>)` entrypoint `web` | publik via cloudflared → traefik:80 |
-| Traefik dashboard  | `api@internal` entrypoint `traefik` | localhost:8080 / Tailscale saja, tidak pernah masuk tunnel |
-| Dozzle             | `Host(dozzle.lan)` entrypoint `traefik` | localhost:8080 / Tailscale saja |
+| whoami             | `Host(whoami.<PUBLIC_DOMAIN>)` entrypoint `web` | public via cloudflared → traefik:80 |
+| Traefik dashboard  | `api@internal` entrypoint `traefik` | localhost:8080 / Tailscale only, never enters tunnel |
+| Dozzle             | `Host(dozzle.lan)` entrypoint `traefik` | localhost:8080 / Tailscale only |
 
-Port hanya di-bind `127.0.0.1` — tidak pernah `0.0.0.0:80/443`.
-Publik sepenuhnya lewat satu Cloudflare Tunnel (bukan port-forward router).
+Ports are only bound to `127.0.0.1` — never `0.0.0.0:80/443`.
+Fully public through a single Cloudflare Tunnel (no router port-forward).
 
-## Batas jujur (FASE 2)
+## Honest limits (PHASE 2)
 
-- Publik **mati saat desktop mode, sleep, atau baterai** — itu by design.
-- TLS di edge: Cloudflare (Full). Full strict menyusul setelah cert lokal (mkcert)
-  di `traefik/certs/` siap untuk `*.lan`.
-- Cloudflare Access: **default ON** di dashboard Zero Trust (atur di sana).
-- Token tunnel: isi sendiri di `secrets/cf-tunnel.yml` (600, gitignored).
-  Unit host `cloudflared.service` sempat world-readable → token dianggap bocor,
-  **rotate di Cloudflare Zero Trust** sebelum `./mode lite` pertama.
-- Data masih di `~/infra/data/` (NVMe 1TB belum ada) — siap migrasi ke `/srv`
-  tanpa mengubah compose (bind path).
+- Public is **down in desktop mode, on sleep, or on battery** — by design.
+- TLS at the edge: Cloudflare (Full). Full strict follows once local certs (mkcert)
+  in `traefik/certs/` are ready for `*.lan`.
+- Cloudflare Access: **default ON** in the Zero Trust dashboard (configure there).
+- Tunnel token: fill it in yourself at `secrets/cf-tunnel.yml` (600, gitignored).
+  The host unit `cloudflared.service` was briefly world-readable → token is
+  considered leaked, **rotate in Cloudflare Zero Trust** before the first `./mode lite`.
+- Data still lives in `~/infra/data/` (no 1TB NVMe yet) — ready to migrate to `/srv`
+  without changing compose (bind path).
 
-## Portal — Infra Manager (FASE 4 + FASE 5)
+## Portal — Infra Manager (PHASE 4 + PHASE 5)
 
-Panel Go (stdlib saja, satu biner) di `stacks/portal/`: kelola hostname,
-deteksi drift, monitor tunnel, generator stack, kelola tunnel & connector.
+Go panel (stdlib only, single binary) in `stacks/portal/`: manage hostnames,
+detect drift, monitor tunnel, generate stacks, manage tunnel & connectors.
 
-- Akses sekarang: `http://127.0.0.1:8300` (bind localhost) dan
-  `https://portal.<PUBLIC_DOMAIN>` — hostname sudah terdaftar di ingress
-  tunnel + DNS, **di depannya Cloudflare Access** (app dibuat manual di
-  dashboard Zero Trust; tanpa login → 302 ke halaman login Access).
-- Yang dikelola: `traefik/dynamic/svc-*.yml`, ingress tunnel (GET-modify-PUT
-  ber-mutex, per tunnel), CNAME DNS, registry di `data/portal/registry.json`
-  dan node/tunnel managed di `data/portal/nodes.json` (gitignored).
-- Sumber kebenaran routing: label compose bila ada (portal menulis file hanya
-  untuk hostname tanpa label; file ganda otomatis dibersihkan saat reconcile),
-  baris di tabel ditandai `label compose`.
-- Hostname lama yang belum terdaftar muncul sebagai orphan + tombol **Adopt**.
-- Sisipan `include` dan hapus file stack juga ditangani portal
-  (`POST /stacks`, `/stacks/<nama>/up|stop|delete`).
+- Access now: `http://127.0.0.1:8300` (bound to localhost) and
+  `https://portal.<PUBLIC_DOMAIN>` — hostname already registered in the tunnel
+  ingress + DNS, **fronted by Cloudflare Access** (app created manually in the
+  Zero Trust dashboard; no login → 302 to the Access login page).
+- What it manages: `traefik/dynamic/svc-*.yml`, tunnel ingress (mutexed
+  GET-modify-PUT, per tunnel), CNAME DNS, registry in `data/portal/registry.json`
+  and managed node/tunnel data in `data/portal/nodes.json` (gitignored).
+- Routing source of truth: compose labels when present (portal only writes files
+  for hostnames without labels; duplicate files are cleaned up automatically on
+  reconcile), rows in the table are tagged `label compose`.
+- Old hostnames not yet registered appear as orphans with an **Adopt** button.
+- `include` injection and stack file deletion are also handled by the portal
+  (`POST /stacks`, `/stacks/<name>/up|stop|delete`).
 
-**FASE 5 — Tunnel & Node** (halaman `/nodes`):
+**PHASE 5 — Tunnel & Node** (page `/nodes`):
 
-- Daftar tunnel akun + jumlah connector; tombol **Tambah connector** → wizard
-  beri nama → pilih tunnel (default join tunnel infra, atau bikin tunnel baru
-  per node) → instruksi koneksi 2 mode dengan penjelasan + use case:
-  **Docker** (`docker run … --token …`) dan **Binary/service**
+- List of account tunnels + connector count; **Add connector** button → wizard:
+  give a name → pick a tunnel (default: join the infra tunnel, or create a new
+  tunnel per node) → connection instructions for 2 modes with explanation + use case:
+  **Docker** (`docker run … --token …`) and **Binary/service**
   (`cloudflared service install`).
-- Halaman instruksi polling `/api/nodes` tiap 3 dtk: koneksi baru otomatis
-  diikat ke nama node; koneksi yang sudah ada sebelum halaman dibuka muncul
-  sebagai tombol **Pakai …** (manual).
-- Nama node = registry lokal (Cloudflare hanya mengenal `client_id`). Saat
-  cloudflared restart dan `client_id` berubah, status jadi **GANTI ID** dan
-  tombol **Ikat ke …** (rebind) memindahkan nama/origin + referensi service.
-- Form hostname kini memilih **tunnel + connector + origin**; drift ikut
-  mengecek: ingress di tunnel tsb, arah CNAME ke `<tunnel-id>.cfargotunnel.com`,
-  origin cocok, dan node masih tersambung.
-- Guard hapus tunnel: hanya tunnel bertanda `managed` (dibuat portal) yang
-  boleh dihapus, dan harus tidak dipakai service. Tunnel infra serta tunnel
-  pihak lain di akun yang sama **tidak akan pernah bisa dihapus dari portal**.
-- Batas jujur Cloudflare: trafik 1 tunnel dibagi ke semua connector → origin
-  harus terjangkau dari semua node di tunnel itu; untuk isolasi per mesin,
-  pakai 1 tunnel per node (bisa dibuat dari halaman yang sama).
+- The instruction page polls `/api/nodes` every 3s: new connections are
+  auto-bound to the node name; connections that existed before the page opened
+  appear as a **Use …** button (manual).
+- Node name = local registry (Cloudflare only knows `client_id`). When
+  cloudflared restarts and `client_id` changes, status becomes **CHANGE ID** and
+  the **Bind to …** button (rebind) moves the name/origin + service reference.
+- Hostname form now selects **tunnel + connector + origin**; drift also checks:
+  ingress in that tunnel, CNAME direction to `<tunnel-id>.cfargotunnel.com`,
+  matching origin, and that the node is still connected.
+- Tunnel delete guard: only tunnels tagged `managed` (created by the portal)
+  may be deleted, and only when no service uses them. The infra tunnel and
+  third-party tunnels in the same account **can never be deleted from the portal**.
+- Honest Cloudflare limit: 1 tunnel's traffic is shared across all connectors →
+  the origin must be reachable from every node in that tunnel; for per-machine
+  isolation, use 1 tunnel per node (can be created from the same page).
 
-Cek status tanpa buka browser:
+Check status without opening a browser:
 
 ```bash
 curl -s http://127.0.0.1:8300/api/report | jq
 curl -s http://127.0.0.1:8300/api/nodes   | jq
 ```
 
-Cadangan CLI bila portal mati: `./publish <sub> [origin]`.
+CLI fallback if the portal is down: `./publish <sub> [origin]`.
 
-## Cara pakai
+## Usage
 
 ```bash
-cp .env.example .env          # isi PUBLIC_DOMAIN
+cp .env.example .env          # fill in PUBLIC_DOMAIN
 chmod 600 .env secrets/cf-tunnel.yml secrets/postgres.env
-./mode status                 # health check lingkungan
-./mode lite                   # publik ON
+./mode status                 # environment health check
+./mode lite                   # public ON
 ./mode lab                    # + dozzle, postgres-lite
-./mode desktop                # semua turun, data aman
+./mode desktop                # everything down, data safe
 ```
 
-Validasi tanpa menjalankan apa pun:
+Validate without running anything:
 
 ```bash
 docker compose --profile lite --profile lab config -q && echo OK
@@ -116,16 +116,16 @@ infra/
 ├── secrets/                # 600, gitignored (cf-tunnel.yml, postgres.env)
 ├── traefik/
 │   ├── traefik.yml         # static config (entrypoint, provider, ping, log)
-│   ├── dynamic/            # dashboard.yml (router private)
-│   └── certs/              # mkcert *.lan (nanti)
-├── DESIGN.md               # arah desain UI portal (dipakai antislop)
-├── publish                 # CLI fallback: tambah hostname via API Cloudflare
+│   ├── dynamic/            # dashboard.yml (private router)
+│   └── certs/              # mkcert *.lan (later)
+├── DESIGN.md               # portal UI design direction (used by antislop)
+├── publish                 # CLI fallback: add hostname via Cloudflare API
 ├── stacks/
-│   ├── whoami/             # pattern PUBLIC (profile lite)
-│   ├── postgres-lite/      # contoh lab (profile lab, network internal)
+│   ├── whoami/             # PUBLIC pattern (profile lite)
+│   ├── postgres-lite/      # lab example (profile lab, internal network)
 │   └── portal/             # Infra Manager (Go + Dockerfile + compose)
-└── data/                   # bind mount postgres (nanti pindah /srv)
+└── data/                   # postgres bind mount (moving to /srv later)
 ```
 
-Menambah stack: bikin `stacks/<nama>/compose.yaml`, tambahkan path ke `include`
-di `compose.yaml`, set `profiles` sesuai mode, kasih `mem_limit` + `cpus`.
+Adding a stack: create `stacks/<name>/compose.yaml`, add the path to `include`
+in `compose.yaml`, set `profiles` per mode, give it `mem_limit` + `cpus`.

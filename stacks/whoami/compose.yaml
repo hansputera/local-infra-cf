@@ -5,8 +5,8 @@ x-logging: &default-logging
     max-file: "3"
 
 services:
-  # PATTERN PUBLIK: Host() harus match hostname di Cloudflare Tunnel.
-  # Diakses publik via cloudflared -> http://traefik:80 -> router ini.
+  # PUBLIC PATTERN: Host() must match the hostname in Cloudflare Tunnel.
+  # Publicly reached via cloudflared -> http://traefik:80 -> this router.
   whoami:
     image: mendhak/http-https-echo:42
     profiles: ["lite", "lab"]
@@ -17,12 +17,12 @@ services:
       - "traefik.http.routers.whoami.rule=Host(`whoami.${PUBLIC_DOMAIN:-example.com}`)"
       - "traefik.http.routers.whoami.entrypoints=web"
       - "traefik.http.services.whoami.loadbalancer.server.port=8080"
-      # PATTERN PRIVAT (contoh, uncomment untuk dipakai):
-      #   hanya localhost/Tailscale — host rule *.lan, TIDAK didaftarkan di CF tunnel.
+      # PRIVATE PATTERN (example, uncomment to use):
+      #   localhost/Tailscale only — *.lan host rule, NOT registered in the CF tunnel.
       #   - "traefik.http.routers.whoami-lan.rule=Host(`whoami.lan`)"
       #   - "traefik.http.routers.whoami-lan.entrypoints=web"
-      #   akses: curl -H 'Host: whoami.lan' http://127.0.0.1  (atau via Tailscale IP)
-    mem_limit: 128m # node idle ~38MB, 64m terlalu mepet buat spike
+      #   access: curl -H 'Host: whoami.lan' http://127.0.0.1  (or via the Tailscale IP)
+    mem_limit: 128m # idle node ~38MB, 64m too tight for a spike
     cpus: 0.1
     logging: *default-logging
     healthcheck:

@@ -1,4 +1,4 @@
-/* Infra Manager: tema, konfirmasi aksi, muat ulang status. Tanpa dependensi. */
+/* Infra Manager: theme, action confirmations, status refresh. No dependencies. */
 (function () {
   var root = document.documentElement;
   var themeBtn = document.getElementById("theme-toggle");
@@ -7,7 +7,7 @@
     root.dataset.theme = t;
     try { localStorage.setItem("portal-theme", t); } catch (e) {}
     if (themeBtn) {
-      themeBtn.textContent = t === "dark" ? "Mode terang" : "Mode gelap";
+      themeBtn.textContent = t === "dark" ? "Light mode" : "Dark mode";
       themeBtn.setAttribute("aria-pressed", String(t === "dark"));
     }
   }
@@ -31,7 +31,7 @@
     });
   });
 
-  // tombol salin pada blok kode instruksi
+  // copy button on the instruction code blocks
   document.querySelectorAll("[data-copy]").forEach(function (btn) {
     btn.addEventListener("click", function () {
       var block = btn.closest(".codeblock");
@@ -39,7 +39,7 @@
       if (!pre) return;
       var done = function () {
         var old = btn.textContent;
-        btn.textContent = "Tersalin";
+        btn.textContent = "Copied";
         setTimeout(function () { btn.textContent = old; }, 1500);
       };
       if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -55,7 +55,7 @@
     });
   });
 
-  // halaman instruksi: polling koneksi baru -> klaim otomatis
+  // instruction page: poll for new connections -> auto claim
   var wait = document.querySelector("[data-wait]");
   if (wait) {
     var wName = wait.getAttribute("data-name");
@@ -72,9 +72,9 @@
       var body = new URLSearchParams({
         client_id: clientId, tunnel_id: wTunnel, name: wName, origin: wOrigin, notes: wNotes
       });
-      mark.textContent = "TERDETEKSI";
+      mark.textContent = "DETECTED";
       mark.className = "mark drift";
-      text.textContent = "Koneksi baru terdeteksi, sedang diikat ke " + wName + "\u2026";
+      text.textContent = "New connection detected, binding it to " + wName + "\u2026";
       fetch("/nodes/claim", {
         method: "POST",
         headers: { "X-Requested-With": "fetch", "Content-Type": "application/x-www-form-urlencoded" },
@@ -83,18 +83,18 @@
         .then(function (res) {
           return res.json().then(function (data) {
             if (!res.ok || !data.ok) throw new Error(data.error || "HTTP " + res.status);
-            mark.textContent = "TERHUBUNG";
+            mark.textContent = "CONNECTED";
             mark.className = "mark ok";
-            text.textContent = "Node " + wName + " terhubung. Membuka daftar node\u2026";
+            text.textContent = "Node " + wName + " connected. Opening the node list\u2026";
             setTimeout(function () {
-              location.href = "/nodes?ok=" + encodeURIComponent("Node " + wName + " terhubung");
+              location.href = "/nodes?ok=" + encodeURIComponent("Node " + wName + " connected");
             }, 900);
           });
         })
         .catch(function (err) {
-          mark.textContent = "GAGAL";
+          mark.textContent = "FAILED";
           mark.className = "mark drift";
-          text.textContent = "Koneksi terdeteksi tapi klaim gagal: " + err.message;
+          text.textContent = "Connection detected but the claim failed: " + err.message;
           if (timer) clearInterval(timer);
         });
     }
@@ -103,7 +103,7 @@
       var b = document.createElement("button");
       b.type = "button";
       b.className = "small";
-      b.textContent = "Pakai " + c.short_id;
+      b.textContent = "Use " + c.short_id;
       b.addEventListener("click", function () {
         if (timer) clearInterval(timer);
         claim(c.client_id);
@@ -124,7 +124,7 @@
             cands.forEach(function (c) { baseline[c.client_id] = true; });
             if (cands.length) {
               manual.hidden = false;
-              manual.innerHTML = '<p class="hint">Ada koneksi di tunnel ini sebelum halaman dibuka; pakai bila memang milikmu:</p>';
+              manual.innerHTML = '<p class="hint">There was a connection on this tunnel before the page opened — use it if it is yours:</p>';
               cands.forEach(function (c) { manual.appendChild(manualButton(c)); });
             }
             return;
@@ -135,21 +135,21 @@
             claim(fresh[0].client_id);
             return;
           }
-          mark.textContent = "MENUNGGU";
+          mark.textContent = "WAITING";
           mark.className = "mark off";
           text.textContent = cands.length
-            ? "Koneksi lama tercatat tapi belum diikat \u2014 pakai tombol di bawah atau jalankan perintah di atas."
-            : "Menunggu cloudflared dari mesin ini terhubung\u2026 dicek tiap 3 detik.";
+            ? "An old connection is recorded but not bound \u2014 use the button below or run the command above."
+            : "Waiting for cloudflared from this machine to connect\u2026 checked every 3 seconds.";
         })
         .catch(function (err) {
-          text.textContent = "Polling gagal: " + err.message + " (akan dicoba lagi)";
+          text.textContent = "Polling failed: " + err.message + " (will retry)";
         });
     }
     timer = setInterval(poll, 3000);
     poll();
   }
 
-  // form hostname: filter node mengikuti tunnel + isi origin dari node
+  // hostname form: filter nodes by tunnel + fill origin from the node
   var tunnelSel = document.getElementById("tunnel_id");
   var nodeSel = document.getElementById("node_id");
   var originInput = document.getElementById("origin");
@@ -189,17 +189,17 @@
     var drift = (report.services || []).filter(function (s) { return (s.drift || []).length > 0; });
     var html;
     if (!(report.services || []).length) {
-      html = '<p class="empty">Belum ada service terdaftar. <a href="/services/new">Tambah hostname pertama</a>.</p>';
+      html = '<p class="empty">No services registered yet. <a href="/services/new">Add your first hostname</a>.</p>';
     } else if (!drift.length) {
-      html = '<p class="empty ok-text">Tidak ada drift. Semua hostname cocok dengan Cloudflare Tunnel dan Traefik. Diperiksa ' +
-        esc(new Date(report.checked_at).toLocaleTimeString("id-ID")) + ".</p>";
+      html = '<p class="empty ok-text">No drift. Every hostname matches Cloudflare Tunnel and Traefik. Checked ' +
+        esc(new Date(report.checked_at).toLocaleTimeString("en-GB")) + ".</p>";
     } else {
       html = '<ul class="drift-list">' + drift.map(function (s) {
         return '<li class="drift-item">' +
           '<div class="drift-top"><span class="mono host">' + esc(s.hostname) + '</span><span class="mark drift">DRIFT</span></div>' +
           '<ul class="reasons">' + (s.drift || []).map(function (d) { return "<li>" + esc(d) + "</li>"; }).join("") + "</ul>" +
           '<form method="post" action="/services/' + esc(s.name) + '/reconcile" class="inline">' +
-          '<button type="submit" class="small">Sinkronkan ulang</button></form></li>';
+          '<button type="submit" class="small">Re-sync</button></form></li>';
       }).join("") + "</ul>";
     }
     live.dataset.state = "ok";
@@ -212,7 +212,7 @@
   refresh.addEventListener("click", function () {
     refresh.disabled = true;
     live.dataset.state = "loading";
-    live.innerHTML = '<p class="loading">Memuat status dari Cloudflare, DNS, dan Traefik...</p>';
+    live.innerHTML = '<p class="loading">Loading status from Cloudflare, DNS and Traefik...</p>';
     fetch("/api/report", { headers: { Accept: "application/json" } })
       .then(function (res) {
         return res.json().then(function (data) {
@@ -223,8 +223,8 @@
       .then(render)
       .catch(function (err) {
         live.dataset.state = "error";
-        live.innerHTML = '<p class="empty err-text">Gagal memuat status: ' + esc(err.message) + ".</p>" +
-          '<p class="empty">Cek izin token Cloudflare atau layanan Traefik, lalu tekan Muat ulang status lagi.</p>';
+        live.innerHTML = '<p class="empty err-text">Failed to load status: ' + esc(err.message) + ".</p>" +
+          '<p class="empty">Check the Cloudflare token permissions or the Traefik service, then hit Refresh status again.</p>';
       })
       .then(function () { refresh.disabled = false; });
   });

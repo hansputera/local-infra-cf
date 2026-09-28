@@ -1,29 +1,29 @@
 {{template "header" .}}
-<h1>{{if .IsEdit}}Ubah hostname{{else}}Tambah hostname{{end}}</h1>
-<p class="sub">Simpan lalu sinkron: file traefik ditulis, ingress tunnel dan DNS disesuaikan untuk jenis publik.</p>
+<h1>{{if .IsEdit}}Edit hostname{{else}}Add hostname{{end}}</h1>
+<p class="sub">Save and sync: the traefik file is written, tunnel ingress and DNS are adjusted for public kind.</p>
 
 {{if .Err}}<p class="flash err" role="alert">{{.Err}}</p>{{end}}
 
 <div class="panel narrow">
   <form method="post" action="{{.Action}}">
-    <label for="name">Nama service</label>
+    <label for="name">Service name</label>
     <input id="name" name="name" required pattern="[a-z0-9]([a-z0-9-]*[a-z0-9])?" value="{{.Service.Name}}" {{if .IsEdit}}readonly{{end}} placeholder="whoami">
-    <p class="hint">Huruf kecil, angka, tanda hubung. Dipakai jadi nama file <span class="mono">svc-nama.yml</span>.</p>
+    <p class="hint">Lowercase letters, digits, hyphens. Becomes the file name <span class="mono">svc-NAME.yml</span>.</p>
 
     <label for="hostname">Hostname</label>
     <input id="hostname" name="hostname" required value="{{.Service.Hostname}}" placeholder="app.{{.Domain}}">
 
     <fieldset>
-      <legend>Jenis akses</legend>
-      <label class="radio"><input type="radio" name="kind" value="public" {{if ne .Service.Kind "private"}}checked{{end}}> Publik (masuk Cloudflare Tunnel + DNS)</label>
-      <label class="radio"><input type="radio" name="kind" value="private" {{if eq .Service.Kind "private"}}checked{{end}}> Privat (hanya localhost / Tailscale)</label>
+      <legend>Access kind</legend>
+      <label class="radio"><input type="radio" name="kind" value="public" {{if ne .Service.Kind "private"}}checked{{end}}> Public (behind Cloudflare Tunnel + DNS)</label>
+      <label class="radio"><input type="radio" name="kind" value="private" {{if eq .Service.Kind "private"}}checked{{end}}> Private (localhost / Tailscale only)</label>
     </fieldset>
 
-    <label for="target">Target (container / nama service di network proxy)</label>
+    <label for="target">Target (container / service name on the proxy network)</label>
     <input id="target" name="target" required value="{{.Service.Target}}" placeholder="infra-whoami-1">
-    <p class="hint">Harus bisa dicapai traefik: nama container atau alias compose di network <span class="mono">infra_proxy</span>.</p>
+    <p class="hint">Must be reachable by traefik: a container name or a compose alias on the <span class="mono">infra_proxy</span> network.</p>
 
-    <label for="port">Port container</label>
+    <label for="port">Container port</label>
     <input id="port" name="port" type="number" min="1" max="65535" required value="{{if .Service.Port}}{{.Service.Port}}{{end}}" placeholder="8080">
 
     {{if eq .Service.Kind "public"}}
@@ -36,29 +36,29 @@
         <option value="{{.ID}}" {{if eq $.Service.TunnelID .ID}}selected{{end}}>{{.Name}} · {{shortID .ID}}</option>
         {{end}}
       </select>
-      <p class="hint">Hostname di-serve lewat tunnel ini; CNAME DNS ikut menunjuk tunnel tsb. Pilih tunnel yang connector-nya sudah terhubung (lihat <a href="/nodes">Tunnel &amp; Node</a>).</p>
+      <p class="hint">The hostname is served through this tunnel; the DNS CNAME points at it too. Pick a tunnel whose connectors are connected (see <a href="/nodes">Tunnel &amp; Node</a>).</p>
 
-      <label for="node_id">Connector / node (opsional)</label>
+      <label for="node_id">Connector / node (optional)</label>
       <select id="node_id" name="node_id">
-        <option value="">— manual (pakai origin di bawah) —</option>
+        <option value="">— manual (use the origin below) —</option>
         {{range .Nodes}}
         <option value="{{.ClientID}}" data-tunnel="{{.TunnelID}}" data-origin="{{.Origin}}" {{if eq $.Service.NodeID .ClientID}}selected{{end}}>{{.Name}} · {{.TunnelID}}</option>
         {{end}}
       </select>
-      <p class="hint">Dipilih → origin otomatis diisi dari node, dan status drift mengecek apakah node masih tersambung. Node di tunnel lain otomatis disembunyikan saat tunnel diganti.</p>
+      <p class="hint">When picked, the origin is filled from the node and drift checking also verifies the node is still connected. Nodes on other tunnels are hidden when the tunnel changes.</p>
 
-      <label for="origin">Origin (service string ingress CF)</label>
+      <label for="origin">Origin (Cloudflare ingress service string)</label>
       <input id="origin" name="origin" value="{{.Service.Origin}}" placeholder="{{.DefaultOrigin}}">
-      <p class="hint">Kosong = ikut node (bila dipilih), lalu default <span class="mono">{{.DefaultOrigin}}</span>. Karena trafik tunnel dibagi ke semua connector, pastikan origin ini terjangkau dari semua node di tunnel terpilih.</p>
+      <p class="hint">Empty = follows the node (if picked), else defaults to <span class="mono">{{.DefaultOrigin}}</span>. Since tunnel traffic is shared across all connectors, make sure this origin is reachable from every node in the selected tunnel.</p>
     </fieldset>
     {{end}}
 
-    <label for="notes">Catatan (opsional)</label>
+    <label for="notes">Notes (optional)</label>
     <input id="notes" name="notes" value="{{.Service.Notes}}" placeholder="">
 
     <div class="form-actions">
-      <button type="submit" class="btn">Simpan dan sinkronkan</button>
-      <a class="btn ghost" href="/services">Batal</a>
+      <button type="submit" class="btn">Save &amp; sync</button>
+      <a class="btn ghost" href="/services">Cancel</a>
     </div>
   </form>
 </div>

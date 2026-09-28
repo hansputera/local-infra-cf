@@ -12,10 +12,10 @@ import (
 	"time"
 )
 
-// Node = satu proses cloudflared yang diakui portal. Cloudflare tidak punya
-// konsep "nama connector", jadi nama & asal-usulnya hidup di file ini saja.
-// Kunci = client_id (UUID grup koneksi), bisa berubah saat cloudflared
-// restart => ada mekanisme rebind di engine.
+// A Node = one cloudflared process acknowledged by the portal. Cloudflare has
+// no concept of "connector name", so the name lives only in this file.
+// Key = client_id (the connection group UUID), which can change whenever
+// cloudflared restarts => the engine keeps a rebind mechanism.
 type Node struct {
 	ClientID  string    `json:"client_id"`
 	TunnelID  string    `json:"tunnel_id"`
@@ -24,19 +24,20 @@ type Node struct {
 	Notes     string    `json:"notes,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 	LastSeen  time.Time `json:"last_seen,omitempty"`
-	// LastOriginIPs: egress ip saat terakhir terhubung, dipakai deteksi rebind
-	// bila client_id berubah setelah cloudflared restart.
+	// LastOriginIPs: egress IPs at last connect, used to detect a rebind
+	// when the client_id changes after a cloudflared restart.
 	LastOriginIPs []string `json:"last_origin_ips,omitempty"`
 }
 
-// ManagedTunnel menandai tunnel yang dibuat/diakui portal. Tunnel infra dan
-// tunnel yang tidak dikenal portal tidak pernah boleh dihapus lewat portal.
+// ManagedTunnel marks a tunnel created/acknowledged by the portal. The infra
+// tunnel and any tunnel the portal does not know must never be deletable from
+// the portal.
 type ManagedTunnel struct {
 	ID      string    `json:"id"`
 	Name    string    `json:"name,omitempty"`
-	Managed bool      `json:"managed"` // true = dibuat portal => boleh dihapus
+	Managed bool      `json:"managed"` // true = created by the portal => deletable
 	AddedAt time.Time `json:"added_at"`
-	Origin  string    `json:"origin,omitempty"` // default origin utk tunnel ini
+	Origin  string    `json:"origin,omitempty"` // default origin for this tunnel
 }
 
 type nodesFile struct {
@@ -45,8 +46,8 @@ type nodesFile struct {
 	Tunnels map[string]*ManagedTunnel `json:"tunnels"`
 }
 
-// NodeStore menyimpan node + tunnel managed dalam satu file terpisah dari
-// registry service supaya format registry.json lama tidak berubah.
+// NodeStore holds nodes + managed tunnels in one file, separate from the
+// service registry so the old registry.json format stays untouched.
 type NodeStore struct {
 	mu   sync.Mutex
 	path string
@@ -69,7 +70,7 @@ func OpenNodes(path string) (*NodeStore, error) {
 		return nil, err
 	}
 	if err := json.Unmarshal(raw, &ns.data); err != nil {
-		return nil, fmt.Errorf("file node rusak: %w", err)
+		return nil, fmt.Errorf("nodes file corrupted: %w", err)
 	}
 	if ns.data.Nodes == nil {
 		ns.data.Nodes = map[string]*Node{}
@@ -97,13 +98,13 @@ func (n *NodeStore) Save() error {
 
 func ValidateNode(nd Node) error {
 	if !nodeNameRe.MatchString(nd.Name) {
-		return errors.New("nama node: huruf kecil, angka, tanda hubung saja")
+		return errors.New("node name: lowercase letters, digits and hyphens only")
 	}
 	if nd.ClientID == "" {
-		return errors.New("client_id wajib diisi")
+		return errors.New("client_id is required")
 	}
 	if nd.TunnelID == "" {
-		return errors.New("node harus menempel pada satu tunnel")
+		return errors.New("node must belong to a tunnel")
 	}
 	return nil
 }
@@ -153,7 +154,7 @@ func (n *NodeStore) Put(nd Node) error {
 	}
 	for id, other := range n.data.Nodes {
 		if id != nd.ClientID && other.Name == nd.Name {
-			return fmt.Errorf("nama node %q sudah dipakai", nd.Name)
+			return fmt.Errorf("node name %q is already taken", nd.Name)
 		}
 	}
 	nd.LastSeen = time.Now().UTC()
@@ -188,8 +189,8 @@ func sameStrings(a, b []string) bool {
 	return true
 }
 
-// Touch memperbarui last_seen; diskip bila perubahan < 60 dtk supaya polling
-// halaman tidak menulis file terus-menerus.
+// Touch updates last_seen; skipped when the delta is under 60s so page
+// polling does not keep writing the file.
 func (n *NodeStore) Touch(clientID string, at time.Time) {
 	n.mu.Lock()
 	nd, ok := n.data.Nodes[clientID]
@@ -208,13 +209,13 @@ func (n *NodeStore) Delete(clientID string) error {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	if _, ok := n.data.Nodes[clientID]; !ok {
-		return fmt.Errorf("node %q tidak ada di registry", clientID)
+		return fmt.Errorf("node %q not in the registry", clientID)
 	}
 	delete(n.data.Nodes, clientID)
 	return n.Save()
 }
 
-// ---- tunnel managed ----
+// ---- managed tunnels ----
 
 func (n *NodeStore) Tunnels() []ManagedTunnel {
 	n.mu.Lock()
@@ -239,7 +240,7 @@ func (n *NodeStore) GetTunnel(id string) (ManagedTunnel, bool) {
 
 func (n *NodeStore) PutTunnel(t ManagedTunnel) error {
 	if t.ID == "" {
-		return errors.New("id tunnel wajib diisi")
+		return errors.New("tunnel id is required")
 	}
 	if t.AddedAt.IsZero() {
 		t.AddedAt = time.Now().UTC()
@@ -255,7 +256,7 @@ func (n *NodeStore) DeleteTunnel(id string) error {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	if _, ok := n.data.Tunnels[id]; !ok {
-		return fmt.Errorf("tunnel %q tidak dikelola portal", id)
+		return fmt.Errorf("tunnel %q is not portal-managed", id)
 	}
 	delete(n.data.Tunnels, id)
 	return n.Save()

@@ -1,13 +1,13 @@
 # Traefik v3 — static config
 entryPoints:
   web:
-    address: ":80" # dibuka cloudflared (network proxy) + 127.0.0.1 untuk tes lokal
+    address: ":80" # opened to cloudflared (network proxy) + 127.0.0.1 for local testing
   traefik:
-    address: ":8080" # dashboard + service PRIVATE (hanya 127.0.0.1)
+    address: ":8080" # dashboard + PRIVATE service (127.0.0.1 only)
 
 api:
   dashboard: true
-  insecure: false # dashboard via router api@internal di dynamic/dashboard.yml
+  insecure: false # dashboard via router api@internal in dynamic/dashboard.yml
 
 ping: {} # healthcheck: http://127.0.0.1:8080/ping
 

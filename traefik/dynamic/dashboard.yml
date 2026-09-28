@@ -1,4 +1,4 @@
-# Dashboard Traefik — hanya di entrypoint `traefik` (127.0.0.1:8080), tidak pernah via tunnel.
+# Traefik dashboard — only on the `traefik` entrypoint (127.0.0.1:8080), never via the tunnel.
 http:
   routers:
     dashboard:

@@ -17,25 +17,26 @@ const (
 	KindPublic  = "public"
 	KindPrivate = "private"
 
-	SourcePortal   = "portal"
-	SourceAdopted  = "adopted"
+	SourcePortal  = "portal"
+	SourceAdopted = "adopted"
 )
 
 type Service struct {
-	Name      string `json:"name"`
-	Hostname  string `json:"hostname"`
-	Kind      string `json:"kind"`
-	Target    string `json:"target"`
-	Port      int    `json:"port"`
-	Source    string `json:"source"`
-	Notes     string `json:"notes,omitempty"`
+	Name     string `json:"name"`
+	Hostname string `json:"hostname"`
+	Kind     string `json:"kind"`
+	Target   string `json:"target"`
+	Port     int    `json:"port"`
+	Source   string `json:"source"`
+	Notes    string `json:"notes,omitempty"`
 
-	// TunnelID & NodeID: asal dipilih lewat form portal. Kosong = tunnel infra
-	// dan origin default. NodeID menunjuk registry node (client_id cloudflared).
+	// TunnelID & NodeID: chosen via the portal form. Empty = the infra tunnel
+	// and the default origin. NodeID points at the node registry (cloudflared
+	// client_id).
 	TunnelID string `json:"tunnel_id,omitempty"`
 	NodeID   string `json:"node_id,omitempty"`
-	// Origin adalah service string ingress CF utk hostname ini. Kosong = ikut
-	// node.Origin, lalu PUBLIC_ORIGIN.
+	// Origin is the CF ingress service string for this hostname. Empty = fall
+	// back to node.Origin, then PUBLIC_ORIGIN.
 	Origin string `json:"origin,omitempty"`
 
 	CreatedAt time.Time `json:"created_at"`
@@ -43,7 +44,7 @@ type Service struct {
 }
 
 type file struct {
-	Version  int                `json:"version"`
+	Version  int                 `json:"version"`
 	Services map[string]*Service `json:"services"`
 }
 
@@ -65,7 +66,7 @@ func Open(path string) (*Store, error) {
 		return nil, err
 	}
 	if err := json.Unmarshal(raw, &s.data); err != nil {
-		return nil, fmt.Errorf("registry rusak: %w", err)
+		return nil, fmt.Errorf("corrupt registry: %w", err)
 	}
 	if s.data.Services == nil {
 		s.data.Services = map[string]*Service{}
@@ -138,7 +139,7 @@ func (s *Store) Put(svc Service) error {
 	}
 	for _, other := range s.data.Services {
 		if other.Name != svc.Name && strings.EqualFold(other.Hostname, svc.Hostname) {
-			return fmt.Errorf("hostname sudah dipakai service %q", other.Name)
+			return fmt.Errorf("hostname already used by service %q", other.Name)
 		}
 	}
 	svc.UpdatedAt = time.Now().UTC()
@@ -151,7 +152,7 @@ func (s *Store) Delete(name string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, ok := s.data.Services[name]; !ok {
-		return fmt.Errorf("service %q tidak ada di registry", name)
+		return fmt.Errorf("service %q not in registry", name)
 	}
 	delete(s.data.Services, name)
 	return s.Save()
@@ -159,19 +160,19 @@ func (s *Store) Delete(name string) error {
 
 func Validate(svc Service) error {
 	if !nameRe.MatchString(svc.Name) {
-		return errors.New("nama service: huruf kecil, angka, tanda hubung saja")
+		return errors.New("service name: lowercase letters, digits and hyphens only")
 	}
 	if !strings.Contains(svc.Hostname, ".") {
-		return errors.New("hostname tidak valid")
+		return errors.New("invalid hostname")
 	}
 	if svc.Kind != KindPublic && svc.Kind != KindPrivate {
-		return errors.New("kind harus public atau private")
+		return errors.New("kind must be public or private")
 	}
 	if svc.Target == "" {
-		return errors.New("target (container / nama service) wajib diisi")
+		return errors.New("target (container / service name) is required")
 	}
 	if svc.Port < 1 || svc.Port > 65535 {
-		return errors.New("port harus 1-65535")
+		return errors.New("port must be 1-65535")
 	}
 	return nil
 }

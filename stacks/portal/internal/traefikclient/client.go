@@ -30,16 +30,16 @@ func New(api, dynamicDir string) *Client {
 }
 
 type Router struct {
-	Name      string   `json:"name"`
-	Rule      string   `json:"rule"`
-	Service   string   `json:"service"`
-	Provider  string   `json:"provider"`
-	Status    string   `json:"status"`
+	Name        string   `json:"name"`
+	Rule        string   `json:"rule"`
+	Service     string   `json:"service"`
+	Provider    string   `json:"provider"`
+	Status      string   `json:"status"`
 	EntryPoints []string `json:"entryPoints"`
 }
 
 type traefikService struct {
-	Name        string `json:"name"`
+	Name         string `json:"name"`
 	LoadBalancer struct {
 		Servers []struct {
 			URL string `json:"url"`
@@ -51,7 +51,7 @@ type HostInfo struct {
 	Hostname string
 	Router   string
 	Provider string
-	Target   string // host:port dari loadbalancer
+	Target   string // host:port from the load balancer
 	Port     int
 	IP       string
 }
@@ -106,8 +106,9 @@ func newSvcIndex(list []traefikService) svcIndex {
 	return idx
 }
 
-// get mencari service milik router. Router docker memakai nama tanpa akhiran
-// provider ("whoami") sedangkan /api/http/services memakai "whoami@docker".
+// get looks up the service owned by the router. Docker routers use the name
+// without the provider suffix ("whoami") while /api/http/services uses
+// "whoami@docker".
 func (idx svcIndex) get(name, provider string) (traefikService, bool) {
 	if s, ok := idx.byName[name]; ok {
 		return s, true
@@ -133,7 +134,7 @@ func (c *Client) services(ctx context.Context) (svcIndex, error) {
 
 var hostRe = regexp.MustCompile("Host\\(`([^`]+)`\\)")
 
-// Hosts memetakan setiap hostname dari router traefik ke target asalnya.
+// Hosts maps every traefik router hostname back to its origin target.
 func (c *Client) Hosts(ctx context.Context) ([]HostInfo, error) {
 	routers, err := c.Routers(ctx)
 	if err != nil {
@@ -154,8 +155,8 @@ func (c *Client) Hosts(ctx context.Context) ([]HostInfo, error) {
 		}
 		svc, ok := svcs.get(r.Service, r.Provider)
 		if !ok {
-			// router ada tapi service tidak ditemukan: hostname tetap dilaporkan
-			// supaya keberadaannya tidak dianggap drift oleh engine.
+			// router exists but the service was not found: still report the
+			// hostname so its presence is not treated as drift by the engine.
 			for _, hm := range m {
 				out = append(out, HostInfo{Hostname: strings.ToLower(hm[1]), Router: r.Name, Provider: r.Provider})
 			}
@@ -189,21 +190,22 @@ func fileName(name string) string {
 	return "svc-" + name + ".yml"
 }
 
-// WriteRouter menulis dynamic config satu service. Watch=true di traefik.yml
-// membuat perubahan terbaca otomatis. `target` = nama container di network
-// proxy (bukan 127.0.0.1: dari dalam container traefik itu merujuk dirinya).
+// WriteRouter writes the dynamic config for a single service. Watch=true in
+// traefik.yml makes changes be picked up automatically. `target` = container
+// name on the proxy network (not 127.0.0.1: from inside the traefik container,
+// which would refer to itself).
 func (c *Client) WriteRouter(name, hostname string, port int, entrypoint, target string) error {
 	if entrypoint == "" {
 		entrypoint = "web"
 	}
 	if port < 1 || port > 65535 {
-		return fmt.Errorf("port tidak valid: %d", port)
+		return fmt.Errorf("invalid port: %d", port)
 	}
 	if strings.ContainsAny(target, " \t\n:/") {
-		return fmt.Errorf("target tidak valid (harus nama container): %q", target)
+		return fmt.Errorf("invalid target (must be a container name): %q", target)
 	}
 	rule := fmt.Sprintf("Host(`%s`)", hostname)
-	body := fmt.Sprintf(`# ditulis otomatis oleh portal (Infra Manager)
+	body := fmt.Sprintf(`# written automatically by the portal (Infra Manager)
 http:
   routers:
     %s:

@@ -1,6 +1,6 @@
 {{define "header"}}
 <!doctype html>
-<html lang="id" data-theme="light">
+<html lang="en" data-theme="light">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -15,11 +15,11 @@
 <header class="top">
   <a class="brand" href="/">Infra Manager</a>
   <span class="domain mono">{{.Domain}}</span>
-  <button type="button" class="theme" id="theme-toggle" aria-pressed="false">Mode gelap</button>
+  <button type="button" class="theme" id="theme-toggle" aria-pressed="false">Dark mode</button>
 </header>
 
 <div class="shell">
-<nav class="nav" aria-label="Navigasi utama">
+<nav class="nav" aria-label="Main navigation">
   <a href="/" class="{{if eq .Active "dash"}}on{{end}}">Dashboard</a>
   <a href="/services" class="{{if eq .Active "services"}}on{{end}}">Hostnames</a>
   <a href="/nodes" class="{{if eq .Active "nodes"}}on{{end}}">Tunnel &amp; Node</a>

@@ -5,8 +5,8 @@ x-logging: &default-logging
     max-file: "3"
 
 services:
-  # Contoh DB — BUKAN produksi. Hanya network internal, tanpa publish port.
-  # Data bind ke ~/infra/data/ (nanti pindah /srv saat NVMe 1TB terpasang).
+  # Sample DB — NOT production. Internal network only, no published ports.
+  # Data bind-mounted to ~/infra/data/ (later moved to /srv when the 1TB NVMe is installed).
   postgres-lite:
     image: postgres:17-alpine
     profiles: ["lab"]

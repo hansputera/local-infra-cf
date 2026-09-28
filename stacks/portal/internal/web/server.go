@@ -64,7 +64,7 @@ func (s *Server) base(r *http.Request, title, active string) baseData {
 func (s *Server) render(w http.ResponseWriter, name string, data any) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := s.tmpl.ExecuteTemplate(w, name, data); err != nil {
-		http.Error(w, "template gagal: "+err.Error(), http.StatusInternalServerError)
+		http.Error(w, "template failed: "+err.Error(), http.StatusInternalServerError)
 	}
 }
 
@@ -146,9 +146,9 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
 
 	report, err := s.Eng.Status(ctx, true)
 	if err != nil {
-		d.FlashErr = "Gagal membaca status: " + err.Error()
+		d.FlashErr = "Failed to read status: " + err.Error()
 	}
-	// Hostname portal sendiri sengaja belum masuk registry: menunggu CF Access.
+	// The portal's own hostname is deliberately not registered yet: waiting for CF Access.
 	kept := report.Orphans[:0]
 	for _, o := range report.Orphans {
 		if strings.EqualFold(o.Hostname, selfHost) {
@@ -193,7 +193,7 @@ func (s *Server) servicesList(w http.ResponseWriter, r *http.Request) {
 	d := servicesData{baseData: s.base(r, "Hostnames", "services")}
 	report, err := s.Eng.Status(ctx, false)
 	if err != nil {
-		d.FlashErr = "Gagal membaca status: " + err.Error()
+		d.FlashErr = "Failed to read status: " + err.Error()
 	} else {
 		d.Services = report.Services
 	}
@@ -212,8 +212,8 @@ type formData struct {
 	DefaultOrigin string
 }
 
-// tunnelOptions mengisi daftar tunnel utk form. Bila API gagal, jatuh ke
-// tunnel infra saja supaya form tetap bisa dipakai.
+// tunnelOptions fills the tunnel list for the form. On API failure it falls
+// back to the infra tunnel alone so the form still works.
 func (s *Server) tunnelOptions(ctx context.Context) []cfclient.Tunnel {
 	if list, err := s.Eng.CF.ListTunnels(ctx); err == nil && len(list) > 0 {
 		return list
@@ -225,7 +225,7 @@ func (s *Server) formNew(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 	defer cancel()
 	d := formData{
-		baseData:      s.base(r, "Tambah hostname", "services"),
+		baseData:      s.base(r, "Add hostname", "services"),
 		IsEdit:        false,
 		Action:        "/services",
 		Service:       registry.Service{Kind: registry.KindPublic, TunnelID: s.Cfg.CFTunnelID},
@@ -241,7 +241,7 @@ func (s *Server) formEdit(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	svc, ok := s.Eng.Reg.Get(name)
 	if !ok {
-		s.redirect(w, r, flashErr(r, "Service "+name+" tidak ada"))
+		s.redirect(w, r, flashErr(r, "Service "+name+" does not exist"))
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
@@ -252,7 +252,7 @@ func (s *Server) formEdit(w http.ResponseWriter, r *http.Request) {
 		svc = &cp
 	}
 	d := formData{
-		baseData:      s.base(r, "Ubah "+name, "services"),
+		baseData:      s.base(r, "Edit "+name, "services"),
 		IsEdit:        true,
 		Action:        "/services/" + name,
 		Service:       *svc,
@@ -281,7 +281,7 @@ func parseService(r *http.Request) (registry.Service, error) {
 
 func (s *Server) createService(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		s.redirect(w, r, flashErr(r, "Form tidak terbaca"))
+		s.redirect(w, r, flashErr(r, "Form could not be read"))
 		return
 	}
 	svc, err := parseService(r)
@@ -295,16 +295,16 @@ func (s *Server) createService(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.Eng.Reconcile(r.Context(), svc.Name); err != nil {
-		s.redirect(w, r, flashErr(r, "Tersimpan tapi sinkron gagal: "+err.Error()))
+		s.redirect(w, r, flashErr(r, "Saved but sync failed: "+err.Error()))
 		return
 	}
-	s.redirect(w, r, flashOK(r, svc.Hostname+" tersinkron (traefik + Cloudflare)"))
+	s.redirect(w, r, flashOK(r, svc.Hostname+" synced (traefik + Cloudflare)"))
 }
 
 func (s *Server) updateService(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if err := r.ParseForm(); err != nil {
-		s.redirect(w, r, flashErr(r, "Form tidak terbaca"))
+		s.redirect(w, r, flashErr(r, "Form could not be read"))
 		return
 	}
 	svc, err := parseService(r)
@@ -322,47 +322,47 @@ func (s *Server) updateService(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.Eng.Reconcile(r.Context(), name); err != nil {
-		s.redirect(w, r, flashErr(r, "Tersimpan tapi sinkron gagal: "+err.Error()))
+		s.redirect(w, r, flashErr(r, "Saved but sync failed: "+err.Error()))
 		return
 	}
-	s.redirect(w, r, flashOK(r, svc.Hostname+" diperbarui dan tersinkron"))
+	s.redirect(w, r, flashOK(r, svc.Hostname+" updated and synced"))
 }
 
 func (s *Server) reconcileService(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if err := s.Eng.Reconcile(r.Context(), name); err != nil {
-		s.redirect(w, r, flashErr(r, "Sinkron "+name+" gagal: "+err.Error()))
+		s.redirect(w, r, flashErr(r, "Sync of "+name+" failed: "+err.Error()))
 		return
 	}
-	s.redirect(w, r, flashOK(r, "Sinkron "+name+" selesai"))
+	s.redirect(w, r, flashOK(r, "Sync of "+name+" finished"))
 }
 
 func (s *Server) deleteService(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	warn, err := s.Eng.Remove(r.Context(), name)
 	if err != nil {
-		s.redirect(w, r, flashErr(r, "Hapus "+name+" gagal: "+err.Error()))
+		s.redirect(w, r, flashErr(r, "Deleting "+name+" failed: "+err.Error()))
 		return
 	}
-	msg := "Service " + name + " dihapus dari registry, Cloudflare, DNS, dan traefik"
+	msg := "Service " + name + " removed from the registry, Cloudflare, DNS and traefik"
 	if warn != "" {
-		msg += ". Perhatian: " + warn
+		msg += ". Warning: " + warn
 	}
 	s.redirect(w, r, flashOK(r, msg))
 }
 
 func (s *Server) adopt(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		s.redirect(w, r, flashErr(r, "Form tidak terbaca"))
+		s.redirect(w, r, flashErr(r, "Form could not be read"))
 		return
 	}
 	host := strings.TrimSpace(r.FormValue("hostname"))
 	svc, err := s.Eng.Adopt(r.Context(), host)
 	if err != nil {
-		s.redirect(w, r, flashErr(r, "Adopt gagal: "+err.Error()))
+		s.redirect(w, r, flashErr(r, "Adopt failed: "+err.Error()))
 		return
 	}
-	s.redirect(w, r, flashOK(r, host+" diadopsi sebagai "+svc.Name))
+	s.redirect(w, r, flashOK(r, host+" adopted as "+svc.Name))
 }
 
 // ---- nodes & tunnels ----
@@ -384,7 +384,7 @@ func (s *Server) nodesPage(w http.ResponseWriter, r *http.Request) {
 	}
 	view, err := s.Eng.NodeView(ctx)
 	if err != nil {
-		d.FlashErr = "Gagal membaca tunnel/koneksi: " + err.Error()
+		d.FlashErr = "Failed to read tunnels/connections: " + err.Error()
 		d.View = engine.NodeView{Nodes: []engine.NodeStatus{}, Candidates: []engine.NodeStatus{}, Tunnels: []engine.TunnelInfo{}}
 	} else {
 		d.View = view
@@ -392,7 +392,7 @@ func (s *Server) nodesPage(w http.ResponseWriter, r *http.Request) {
 	s.render(w, "nodes.html", d)
 }
 
-// ---- wizard tambah connector ----
+// ---- add-connector wizard ----
 
 type wizardData struct {
 	baseData
@@ -408,7 +408,7 @@ type wizardData struct {
 }
 
 func dockerRunCmd(name, token string) string {
-	return fmt.Sprintf(`# container tunggal (VPS, Raspberry Pi OS + Docker, mini PC)
+	return fmt.Sprintf(`# single container (VPS, Raspberry Pi OS + Docker, mini PC)
 docker run -d \
   --name cloudflared-%s \
   --restart unless-stopped \
@@ -417,30 +417,30 @@ docker run -d \
 }
 
 func binaryCmd(token string) string {
-	return fmt.Sprintf(`# 1) unduh binary (ganti arch: amd64 / arm64)
+	return fmt.Sprintf(`# 1) download the binary (swap arch: amd64 / arm64)
 curl -L -o cloudflared \
   https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
 chmod +x cloudflared
 
-# 2) jadikan service systemd (Linux) - token = token tunnel ini
+# 2) install as a systemd service (Linux) - token = this tunnel's token
 sudo ./cloudflared service install %s
 sudo systemctl enable --now cloudflared
 
-# alternatif tanpa service (uji cepat):
+# alternative without a service (quick test):
 ./cloudflared tunnel run --token %s`, token, token)
 }
 
-// addNodeWizard: langkah 1 -> halaman instruksi + polling deteksi koneksi baru.
+// addNodeWizard: step 1 -> instructions page with polling for new connections.
 func (s *Server) addNodeWizard(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		s.redirect(w, r, flashErr(r, "Form tidak terbaca"))
+		s.redirect(w, r, flashErr(r, "Form could not be read"))
 		return
 	}
 	name := strings.ToLower(strings.TrimSpace(r.FormValue("name")))
 	origin := strings.TrimSpace(r.FormValue("origin"))
 	notes := strings.TrimSpace(r.FormValue("notes"))
 	if name == "" {
-		s.redirect(w, r, flashErr(r, "Nama node wajib diisi"))
+		s.redirect(w, r, flashErr(r, "Node name is required"))
 		return
 	}
 
@@ -452,12 +452,12 @@ func (s *Server) addNodeWizard(w http.ResponseWriter, r *http.Request) {
 	if nt := strings.TrimSpace(r.FormValue("new_tunnel")); nt != "" {
 		ti, err := s.Eng.CreateManagedTunnel(ctx, nt, origin)
 		if err != nil {
-			s.redirect(w, r, flashErr(r, "Buat tunnel gagal: "+err.Error()))
+			s.redirect(w, r, flashErr(r, "Creating the tunnel failed: "+err.Error()))
 			return
 		}
 		tunnelID, tunnelName = ti.ID, ti.Name
 	} else if tunnelID == "" || tunnelID == "new" {
-		s.redirect(w, r, flashErr(r, "Pilih tunnel dulu"))
+		s.redirect(w, r, flashErr(r, "Pick a tunnel first"))
 		return
 	} else {
 		if list, err := s.Eng.CF.ListTunnels(ctx); err == nil {
@@ -468,7 +468,7 @@ func (s *Server) addNodeWizard(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if tunnelName == "" && tunnelID != s.Cfg.CFTunnelID {
-			s.redirect(w, r, flashErr(r, "Tunnel "+tunnelID+" tidak ditemukan di akun CF"))
+			s.redirect(w, r, flashErr(r, "Tunnel "+tunnelID+" not found on the CF account"))
 			return
 		}
 		if tunnelName == "" {
@@ -478,7 +478,7 @@ func (s *Server) addNodeWizard(w http.ResponseWriter, r *http.Request) {
 
 	token, terr := s.Eng.CF.TunnelTokenFor(ctx, tunnelID)
 	d := wizardData{
-		baseData:   s.base(r, "Hubungkan node", "nodes"),
+		baseData:   s.base(r, "Connect node", "nodes"),
 		Name:       name,
 		TunnelID:   tunnelID,
 		TunnelName: tunnelName,
@@ -498,10 +498,10 @@ func wantsJSON(r *http.Request) bool {
 	return r.Header.Get("X-Requested-With") == "fetch" || strings.Contains(r.Header.Get("Accept"), "application/json")
 }
 
-// claimNode mengikat kandidat koneksi (client_id) ke nama node.
+// claimNode binds a connection candidate (client_id) to a node name.
 func (s *Server) claimNode(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		s.claimFail(w, r, "Form tidak terbaca")
+		s.claimFail(w, r, "Form could not be read")
 		return
 	}
 	nd, err := s.Eng.ClaimNode(
@@ -519,7 +519,7 @@ func (s *Server) claimNode(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"ok": true, "name": nd.Name, "client_id": nd.ClientID})
 		return
 	}
-	s.redirect(w, r, flashOK(r, "Node "+nd.Name+" terhubung ("+shortID(nd.ClientID)+")"))
+	s.redirect(w, r, flashOK(r, "Node "+nd.Name+" connected ("+shortID(nd.ClientID)+")"))
 }
 
 func (s *Server) claimFail(w http.ResponseWriter, r *http.Request, msg string) {
@@ -538,12 +538,12 @@ func (s *Server) unbindNode(w http.ResponseWriter, r *http.Request) {
 		s.redirect(w, r, flashErr(r, err.Error()))
 		return
 	}
-	s.redirect(w, r, flashOK(r, "Node "+nd.Name+" ("+shortID(id)+") dilepas dari registry"))
+	s.redirect(w, r, flashOK(r, "Node "+nd.Name+" ("+shortID(id)+") unbound from the registry"))
 }
 
 func (s *Server) rebindNode(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		s.redirect(w, r, flashErr(r, "Form tidak terbaca"))
+		s.redirect(w, r, flashErr(r, "Form could not be read"))
 		return
 	}
 	nd, err := s.Eng.RebindNode(r.PathValue("id"), strings.TrimSpace(r.FormValue("client_id")))
@@ -551,12 +551,12 @@ func (s *Server) rebindNode(w http.ResponseWriter, r *http.Request) {
 		s.redirect(w, r, flashErr(r, err.Error()))
 		return
 	}
-	s.redirect(w, r, flashOK(r, "Node "+nd.Name+" sekarang menempel di "+shortID(nd.ClientID)))
+	s.redirect(w, r, flashOK(r, "Node "+nd.Name+" now bound to "+shortID(nd.ClientID)))
 }
 
 func (s *Server) createTunnel(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		s.redirect(w, r, flashErr(r, "Form tidak terbaca"))
+		s.redirect(w, r, flashErr(r, "Form could not be read"))
 		return
 	}
 	ti, err := s.Eng.CreateManagedTunnel(r.Context(), r.FormValue("name"), strings.TrimSpace(r.FormValue("origin")))
@@ -564,7 +564,7 @@ func (s *Server) createTunnel(w http.ResponseWriter, r *http.Request) {
 		s.redirect(w, r, flashErr(r, err.Error()))
 		return
 	}
-	s.redirect(w, r, flashOK(r, "Tunnel "+ti.Name+" dibuat ("+shortID(ti.ID)+") — pilih di form Tambah connector"))
+	s.redirect(w, r, flashOK(r, "Tunnel "+ti.Name+" created ("+shortID(ti.ID)+") — pick it in the Add connector form"))
 }
 
 func (s *Server) deleteTunnel(w http.ResponseWriter, r *http.Request) {
@@ -572,7 +572,7 @@ func (s *Server) deleteTunnel(w http.ResponseWriter, r *http.Request) {
 		s.redirect(w, r, flashErr(r, err.Error()))
 		return
 	}
-	s.redirect(w, r, flashOK(r, "Tunnel "+shortID(r.PathValue("id"))+" dihapus"))
+	s.redirect(w, r, flashOK(r, "Tunnel "+shortID(r.PathValue("id"))+" deleted"))
 }
 
 func (s *Server) apiNodes(w http.ResponseWriter, r *http.Request) {
@@ -610,7 +610,7 @@ func (s *Server) stacks(w http.ResponseWriter, r *http.Request) {
 	d := stacksData{baseData: s.base(r, "Stack", "stacks")}
 	includes, err := stackgen.Includes(s.Cfg.InfraRoot)
 	if err != nil {
-		d.Err = "Gagal membaca compose.yaml root: " + err.Error()
+		d.Err = "Failed to read the root compose.yaml: " + err.Error()
 		s.render(w, "stacks.html", d)
 		return
 	}
@@ -634,7 +634,7 @@ func (s *Server) stacks(w http.ResponseWriter, r *http.Request) {
 		if inSet[rel] {
 			info.Included = true
 		}
-		// root compose juga meng-include file ini dengan nama lain
+		// the root compose may include this file under another name
 		for _, inc := range includes {
 			if strings.HasPrefix(inc, "stacks/"+e.Name()+"/") {
 				info.Included = true
@@ -675,7 +675,7 @@ func parseStack(r *http.Request) (stackgen.Spec, error) {
 func (s *Server) createStack(w http.ResponseWriter, r *http.Request) {
 	spec, err := parseStack(r)
 	if err != nil {
-		s.redirect(w, r, flashErr(r, "Form tidak terbaca"))
+		s.redirect(w, r, flashErr(r, "Form could not be read"))
 		return
 	}
 	rel, err := stackgen.Write(s.Cfg.InfraRoot, spec)
@@ -683,21 +683,21 @@ func (s *Server) createStack(w http.ResponseWriter, r *http.Request) {
 		s.redirect(w, r, flashErr(r, err.Error()))
 		return
 	}
-	msg := "File " + rel + " dibuat"
+	msg := "File " + rel + " created"
 	if spec.Hostname != "" {
 		svc := registry.Service{
 			Name: spec.Name, Hostname: spec.Hostname, Kind: registry.KindPublic,
 			Target: spec.Name, Port: spec.Port, Source: registry.SourcePortal,
-			Notes: "dibuat dari generator stack",
+			Notes: "created by the stack generator",
 		}
 		if err := s.Eng.Reg.Put(svc); err == nil {
 			if err := s.Eng.Reconcile(r.Context(), spec.Name); err != nil {
-				msg += ", tapi sinkron hostname gagal: " + err.Error()
+				msg += ", but hostname sync failed: " + err.Error()
 			} else {
-				msg += ", hostname " + spec.Hostname + " tersinkron"
+				msg += ", hostname " + spec.Hostname + " synced"
 			}
 		} else {
-			msg += ", hostname gagal terdaftar: " + err.Error()
+			msg += ", hostname registration failed: " + err.Error()
 		}
 	}
 	s.redirect(w, r, flashOK(r, msg))
@@ -715,7 +715,7 @@ func (s *Server) composeAction(w http.ResponseWriter, r *http.Request, name stri
 		s.redirect(w, r, flashErr(r, err.Error()))
 		return
 	}
-	s.redirect(w, r, flashOK(r, "docker compose "+strings.Join(args, " ")+" selesai"))
+	s.redirect(w, r, flashOK(r, "docker compose "+strings.Join(args, " ")+" finished"))
 }
 
 func (s *Server) stackUp(w http.ResponseWriter, r *http.Request) {
@@ -739,15 +739,15 @@ func (s *Server) stackDelete(w http.ResponseWriter, r *http.Request) {
 		s.mu.Unlock()
 	}
 	if err := stackgen.Delete(s.Cfg.InfraRoot, name); err != nil {
-		s.redirect(w, r, flashErr(r, "Hapus file gagal: "+err.Error()))
+		s.redirect(w, r, flashErr(r, "Deleting the file failed: "+err.Error()))
 		return
 	}
-	msg := "Stack " + name + " dihentikan dan file-nya dihapus"
+	msg := "Stack " + name + " stopped and its file deleted"
 	if _, ok := s.Eng.Reg.Get(name); ok {
 		if _, err := s.Eng.Remove(r.Context(), name); err != nil {
-			msg += ". Registry service tidak terhapus: " + err.Error()
+			msg += ". Service registry entry not removed: " + err.Error()
 		} else {
-			msg += ", hostname terkait ikut dilepas dari Cloudflare"
+			msg += ", the related hostname was released from Cloudflare too"
 		}
 	}
 	s.redirect(w, r, flashOK(r, msg))

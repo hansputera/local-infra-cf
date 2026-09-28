@@ -23,16 +23,16 @@ services:
     restart: unless-stopped
     command: --configFile=/etc/traefik/traefik.yml
     ports:
-      # Hanya localhost — TIDAK pernah 0.0.0.0 (publik via cloudflared saja)
+      # Localhost only — NEVER 0.0.0.0 (public access only via cloudflared)
       - "127.0.0.1:80:80"
       - "127.0.0.1:8080:8080"
-      # Akses dari device lain via Tailscale (opsional, uncomment bila perlu):
+      # Access from other devices via Tailscale (optional, uncomment if needed):
       # - "100.118.233.127:8080:8080"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
       - ./traefik/dynamic:/etc/traefik/dynamic:ro
-      - ./traefik/certs:/etc/traefik/certs:ro # mkcert nanti (*.lan)
+      - ./traefik/certs:/etc/traefik/certs:ro # mkcert later (*.lan)
     networks: [proxy]
     mem_limit: 256m
     cpus: 0.5
@@ -49,11 +49,11 @@ services:
     profiles: ["lite", "lab"]
     restart: unless-stopped
     command: tunnel --config /etc/cloudflared/config.yml run
-    # Image default uid 65532 tidak bisa baca secrets 600 milik user → jalankan sebagai user host
+    # Default image uid 65532 cannot read the user's 600 secrets → run as the host user
     user: "${PUID:-1000}:${PGID:-1000}"
     volumes:
       - ./secrets/cf-tunnel.yml:/etc/cloudflared/config.yml:ro
-    # Ingress tunnel lama pakai localhost:PORT — dari dalam container itu bukan host
+    # Old tunnel ingress uses localhost:PORT — inside the container that is not the host
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks: [proxy]
@@ -61,11 +61,11 @@ services:
     mem_limit: 192m
     cpus: 0.25
     logging: *default-logging
-    # Tanpa healthcheck: image distroless (tidak ada sh/wget/curl).
+    # No healthcheck: distroless image (no sh/wget/curl).
     # Monitoring: `./mode status` + Cloudflare Zero Trust → Tunnels.
 
-  # Privasi ketat: hanya entrypoint `traefik` (127.0.0.1:8080) — tidak pernah masuk tunnel.
-  # Justifikasi docker.sock (root-equivalent): viewer log lab-only, mati saat mode desktop/lite.
+  # Strict privacy: only the `traefik` entrypoint (127.0.0.1:8080) — never enters the tunnel.
+  # docker.sock justification (root-equivalent): lab-only log viewer, off in desktop/lite modes.
   dozzle:
     image: amir20/dozzle:v11.1.2
     profiles: ["lab"]
@@ -81,4 +81,4 @@ services:
     mem_limit: 128m
     cpus: 0.25
     logging: *default-logging
-    # Tanpa healthcheck: image distroless (tidak ada sh/wget/curl).
+    # No healthcheck: distroless image (no sh/wget/curl).

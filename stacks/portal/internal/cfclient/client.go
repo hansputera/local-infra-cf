@@ -21,8 +21,8 @@ type Client struct {
 	TunnelID  string
 
 	http *http.Client
-	// ingressMu mengunci GET-modify-PUT konfigurasi tunnel. PUT = REPLACE
-	// seluruh config, jadi dua reconcile paralel bisa saling menghapus.
+	// ingressMu guards the GET-modify-PUT of the tunnel configuration. PUT =
+	// REPLACE the whole config, so two parallel reconciles can wipe each other.
 	ingressMu sync.Mutex
 }
 
@@ -76,7 +76,7 @@ func (c *Client) do(ctx context.Context, method, url string, body any, out any) 
 	}
 	var env envelope
 	if err := json.Unmarshal(raw, &env); err != nil {
-		return fmt.Errorf("respons CF bukan JSON (HTTP %d): %s", resp.StatusCode, snippet(raw))
+		return fmt.Errorf("cf response is not JSON (HTTP %d): %s", resp.StatusCode, snippet(raw))
 	}
 	if !env.Success || resp.StatusCode >= 400 {
 		return fmt.Errorf("CF %s %s -> HTTP %d: %s", method, path(url), resp.StatusCode, env.errorText())
@@ -91,7 +91,7 @@ func (c *Client) do(ctx context.Context, method, url string, body any, out any) 
 
 func (e envelope) errorText() string {
 	if len(e.Errors) == 0 {
-		return "success=false tanpa pesan"
+		return "success=false without message"
 	}
 	parts := make([]string, 0, len(e.Errors))
 	for _, er := range e.Errors {
@@ -143,8 +143,8 @@ func (c *Client) tunnelURLFor(tid, suffix string) string {
 	return fmt.Sprintf("%s/accounts/%s/cfd_tunnel/%s%s", apiBase, c.AccountID, tid, suffix)
 }
 
-// GetIngress mengembalikan ingress saat ini, urutan dipertahankan
-// (catch-all harus tetap terakhir).
+// GetIngress returns the current ingress, order is preserved (the catch-all
+// must stay last).
 func (c *Client) GetIngress(ctx context.Context) ([]IngressRule, map[string]any, error) {
 	return c.GetIngressTunnel(ctx, c.TunnelID)
 }
@@ -190,13 +190,13 @@ func (c *Client) PutIngressTunnel(ctx context.Context, tid string, cfg map[strin
 	return c.do(ctx, http.MethodPut, c.tunnelURLFor(tid, "/configurations"), map[string]any{"config": cfg}, nil)
 }
 
-// MutateIngress jalankan fn di bawah mutex lalu PUT hasilnya.
+// MutateIngress runs fn under the mutex then PUTs the result.
 func (c *Client) MutateIngress(ctx context.Context, fn func([]IngressRule) ([]IngressRule, error)) ([]IngressRule, error) {
 	return c.MutateIngressTunnel(ctx, c.TunnelID, fn)
 }
 
-// MutateIngressTunnel: sama, untuk tunnel tertentu. Mutex global karena
-// PUT = REPLACE seluruh config dan dua operasi paralel bisa saling menghapus.
+// MutateIngressTunnel: same, for a specific tunnel. Global mutex because PUT =
+// REPLACE the whole config and two parallel operations can wipe each other.
 func (c *Client) MutateIngressTunnel(ctx context.Context, tid string, fn func([]IngressRule) ([]IngressRule, error)) ([]IngressRule, error) {
 	c.ingressMu.Lock()
 	defer c.ingressMu.Unlock()
@@ -216,7 +216,7 @@ func (c *Client) MutateIngressTunnel(ctx context.Context, tid string, fn func([]
 
 func IsCatchAll(r IngressRule) bool { return r.Hostname == "" }
 
-// SetHostname: set/replace rule hostname di posisi semula, catch-all tetap terakhir.
+// SetHostname: set/replace the hostname rule in place, catch-all stays last.
 func SetHostname(rules []IngressRule, hostname, serviceURL string) []IngressRule {
 	out := make([]IngressRule, 0, len(rules)+1)
 	found := false
@@ -351,7 +351,7 @@ type Tunnel struct {
 }
 
 func (c *Client) ListTunnels(ctx context.Context) ([]Tunnel, error) {
-	// result = array langsung (bukan objek pembungkus)
+	// result is a direct array (not a wrapper object)
 	var out []Tunnel
 	url := fmt.Sprintf("%s/accounts/%s/cfd_tunnel?is_deleted=false", apiBase, c.AccountID)
 	if err := c.do(ctx, http.MethodGet, url, nil, &out); err != nil {
@@ -374,7 +374,7 @@ type connectionsResult struct {
 	Conns []Conn `json:"conns"`
 }
 
-// ConnGroup = satu proses cloudflared (client_id) yang terhubung ke tunnel.
+// ConnGroup = one cloudflared process (client_id) connected to the tunnel.
 type ConnGroup struct {
 	ID      string    `json:"id"`
 	Version string    `json:"version"`
@@ -402,7 +402,7 @@ func (g ConnGroup) OriginIPs() []string {
 }
 
 func (c *Client) ConnectionsForTunnel(ctx context.Context, tid string) ([]ConnGroup, error) {
-	// result = array grup connector; tiap grup punya "conns"
+	// result is an array of connector groups; each group has "conns"
 	var groups []ConnGroup
 	if err := c.do(ctx, http.MethodGet, c.tunnelURLFor(tid, "/connections"), nil, &groups); err != nil {
 		return nil, err
@@ -427,7 +427,7 @@ func (c *Client) TunnelToken(ctx context.Context) (string, error) {
 }
 
 func (c *Client) TunnelTokenFor(ctx context.Context, tid string) (string, error) {
-	// Respons CF kadang berupa string langsung, kadang objek {token}.
+	// The CF response is sometimes a bare string, sometimes a {token} object.
 	var raw json.RawMessage
 	if err := c.do(ctx, http.MethodGet, c.tunnelURLFor(tid, "/token"), nil, &raw); err != nil {
 		return "", err
@@ -440,12 +440,12 @@ func (c *Client) TunnelTokenFor(ctx context.Context, tid string) (string, error)
 		Token string `json:"token"`
 	}
 	if err := json.Unmarshal(raw, &obj); err != nil || obj.Token == "" {
-		return "", fmt.Errorf("token tunnel tidak terbaca: %s", snippet(raw))
+		return "", fmt.Errorf("tunnel token unreadable: %s", snippet(raw))
 	}
 	return obj.Token, nil
 }
 
-// CreateTunnel membuat tunnel remote-config baru di account.
+// CreateTunnel creates a new remote-config tunnel in the account.
 func (c *Client) CreateTunnel(ctx context.Context, name string) (Tunnel, error) {
 	var out Tunnel
 	url := fmt.Sprintf("%s/accounts/%s/cfd_tunnel", apiBase, c.AccountID)
@@ -456,13 +456,13 @@ func (c *Client) CreateTunnel(ctx context.Context, name string) (Tunnel, error) 
 	return out, nil
 }
 
-// DeleteTunnel menghapus tunnel remote-config. Guard anti salah hapus ada di
-// engine (tunnel infra & tunnel non-managed tidak boleh lewat sini).
+// DeleteTunnel deletes a remote-config tunnel. The wrong-delete guard lives in
+// the engine (infra tunnels and non-managed tunnels must not pass through here).
 func (c *Client) DeleteTunnel(ctx context.Context, tid string) error {
 	return c.do(ctx, http.MethodDelete, c.tunnelURLFor(tid, ""), nil, nil)
 }
 
-// ---- Access (bootstrap portal di balik Cloudflare Access) ----
+// ---- Access (bootstrap the portal behind Cloudflare Access) ----
 
 type AccessApp struct {
 	ID              string         `json:"id,omitempty"`
@@ -489,8 +489,8 @@ func (c *Client) ListAccessApps(ctx context.Context) ([]AccessApp, error) {
 	return apps, nil
 }
 
-// EnsureSelfHostedApp bikin app self-hosted di domain kalau belum ada,
-// dengan policy allow email tertentu.
+// EnsureSelfHostedApp creates a self-hosted app on the domain if it does not
+// exist yet, with an allow policy for the given emails.
 func (c *Client) EnsureSelfHostedApp(ctx context.Context, name, hostname string, emails []string) (string, error) {
 	apps, err := c.ListAccessApps(ctx)
 	if err != nil {

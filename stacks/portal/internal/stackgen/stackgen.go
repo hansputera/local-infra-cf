@@ -11,17 +11,17 @@ import (
 )
 
 type Spec struct {
-	Name     string            // service key di compose + nama folder
-	Image    string            // mis. nginx:alpine
-	Port     int               // port container yang dilayani (0 = tanpa port)
-	Hostname string            // hostname publik (opsional, ditulis label traefik)
-	Mem      string            // mis. 128m
-	CPUs     string            // mis. 0.25
-	Profile  string            // lab | lite
+	Name     string // service key in compose + folder name
+	Image    string // e.g. nginx:alpine
+	Port     int    // container port served (0 = no port)
+	Hostname string // public hostname (optional, writes the traefik label)
+	Mem      string // e.g. 128m
+	CPUs     string // e.g. 0.25
+	Profile  string // lab | lite
 	Env      map[string]string
-	Volumes  []string          // host:container
-	Restart  string            // default unless-stopped
-	Networks []string          // default [proxy]
+	Volumes  []string // host:container
+	Restart  string   // default unless-stopped
+	Networks []string // default [proxy]
 	Notes    string
 }
 
@@ -29,19 +29,19 @@ var nameRe = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`)
 
 func (s Spec) validate() error {
 	if !nameRe.MatchString(s.Name) {
-		return errors.New("nama stack: huruf kecil, angka, tanda hubung")
+		return errors.New("stack name: lowercase letters, digits, hyphens")
 	}
 	if strings.TrimSpace(s.Image) == "" {
-		return errors.New("image wajib diisi")
+		return errors.New("image is required")
 	}
 	if s.Profile != "lab" && s.Profile != "lite" && s.Profile != "" {
-		return errors.New("profile harus lab atau lite")
+		return errors.New("profile must be lab or lite")
 	}
 	if s.Profile == "" {
 		s.Profile = "lab"
 	}
 	if s.Port < 0 || s.Port > 65535 {
-		return errors.New("port tidak valid")
+		return errors.New("invalid port")
 	}
 	return nil
 }
@@ -65,11 +65,11 @@ func (s Spec) normalized() Spec {
 	return s
 }
 
-// YAML ditulis manual: hanya field yang kami hasilkan, tanpa dependensi
-// library eksternal, dan urutan yang stabil supaya diff minimal.
+// YAML is written by hand: only the fields we emit, no external library
+// dependency, and a stable order so diffs stay minimal.
 func (s Spec) compose() string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "# ditulis otomatis oleh portal (Infra Manager)\nx-logging: &default-logging\n")
+	fmt.Fprintf(&b, "# written automatically by the portal (Infra Manager)\nx-logging: &default-logging\n")
 	fmt.Fprintf(&b, "  driver: json-file\n  options:\n    max-size: \"10m\"\n    max-file: \"3\"\n\n")
 	fmt.Fprintf(&b, "services:\n")
 	fmt.Fprintf(&b, "  %s:\n", s.Name)
@@ -77,7 +77,7 @@ func (s Spec) compose() string {
 	if s.Profile != "lite" {
 		fmt.Fprintf(&b, "    profiles: [%q]\n", s.Profile)
 	} else {
-		// profile lite selalu ikut saat `./mode lite`
+		// the lite profile always joins in on `./mode lite`
 		fmt.Fprintf(&b, "    profiles: [\"lite\", \"lab\"]\n")
 	}
 	fmt.Fprintf(&b, "    restart: %s\n", s.Restart)
@@ -99,8 +99,9 @@ func (s Spec) compose() string {
 		}
 	}
 	b.WriteString("    networks: [" + strings.Join(quoteAll(s.Networks), ", ") + "]\n")
-	// Tanpa label traefik: routing ditulis portal lewat traefik/dynamic/svc-*.yml
-	// supaya ada satu sumber kebenaran (label docker provider bikin router ganda).
+	// No traefik labels: the portal writes routing through
+	// traefik/dynamic/svc-*.yml so there is a single source of truth (docker
+	// provider labels would create duplicate routers).
 	fmt.Fprintf(&b, "    mem_limit: %s\n", s.Mem)
 	fmt.Fprintf(&b, "    cpus: %s\n", s.CPUs)
 	fmt.Fprintf(&b, "    logging: *default-logging\n")
@@ -129,7 +130,7 @@ func sortStrings(a []string) {
 
 func (s Spec) RelPath() string { return filepath.Join("stacks", s.Name, "compose.yaml") }
 
-// Write membuat stacks/<name>/compose.yaml dan memastikan root include-nya.
+// Write creates stacks/<name>/compose.yaml and makes sure the root includes it.
 func Write(root string, spec Spec) (string, error) {
 	if err := spec.validate(); err != nil {
 		return "", err
@@ -138,7 +139,7 @@ func Write(root string, spec Spec) (string, error) {
 	dir := filepath.Join(root, "stacks", spec.Name)
 	if _, err := os.Stat(dir); err == nil {
 		if _, err := os.Stat(filepath.Join(dir, "compose.yaml")); err == nil {
-			return "", fmt.Errorf("stack %q sudah ada, hapus dulu atau pakai nama lain", spec.Name)
+			return "", fmt.Errorf("stack %q already exists, delete it first or use another name", spec.Name)
 		}
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -150,7 +151,7 @@ func Write(root string, spec Spec) (string, error) {
 		return "", err
 	}
 	if err := EnsureInclude(root, rel); err != nil {
-		return "", fmt.Errorf("tulis include: %w", err)
+		return "", fmt.Errorf("write include: %w", err)
 	}
 	return rel, nil
 }
@@ -188,8 +189,8 @@ func EnsureInclude(root, rel string) error {
 		}
 	}
 	if idx >= 0 {
-		// titik sisip = setelah entri `- ` terakhir, sebelum baris kosong
-		// yang menutup blok, supaya formatting asli tidak berantakan.
+		// insertion point = after the last `- ` entry, before the blank line
+		// that closes the block, so the original formatting stays intact.
 		last := idx
 		for j := idx + 1; j < len(lines); j++ {
 			ln := lines[j]
@@ -212,7 +213,7 @@ func EnsureInclude(root, rel string) error {
 		return writeLines(rootCompose, out)
 	}
 
-	// include tidak ada: buat blok baru setelah baris `name:`
+	// no include: create a new block after the `name:` line
 	out := make([]string, 0, len(lines)+4)
 	added := false
 	for _, ln := range lines {
@@ -266,7 +267,7 @@ func RemoveInclude(root, rel string) error {
 	return os.Rename(tmp, rootCompose)
 }
 
-// Includes membaca root compose dan mengembalikan entri include.
+// Includes reads the root compose and returns its include entries.
 func Includes(root string) ([]string, error) {
 	raw, err := os.ReadFile(filepath.Join(root, "compose.yaml"))
 	if err != nil {
@@ -293,7 +294,7 @@ func Includes(root string) ([]string, error) {
 	return out, nil
 }
 
-// RunCompose menjalankan `docker compose <args...>` dari root project.
+// RunCompose runs `docker compose <args...>` from the project root.
 func RunCompose(root string, args ...string) (string, error) {
 	full := append([]string{"compose"}, args...)
 	cmd := exec.Command("docker", full...)

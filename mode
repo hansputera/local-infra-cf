@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # infra mode switcher — desktop | lite | lab | status
-# desktop: semua container DOWN (tanpa -v, data & secrets tetap)
-# lite    : traefik + cloudflared + service profile lite (publik aktif)
+# desktop: all containers DOWN (no -v, data & secrets kept)
+# lite    : traefik + cloudflared + lite service profile (public enabled)
 # lab     : lite + dozzle + postgres-lite
 set -euo pipefail
 
@@ -9,23 +9,23 @@ cd "$(dirname "$(readlink -f "$0")")"
 
 usage() {
   cat <<'EOF'
-Pemakaian: ./mode desktop|lite|lab|status
+Usage: ./mode desktop|lite|lab|status
 
-  desktop  Semua container stop+hapus (TANPA -v) — hemat resource, publik OFF
-  lite     traefik + cloudflared + service profile lite — publik ON
+  desktop  Stop+remove all containers (NO -v) — saves resources, public OFF
+  lite     traefik + cloudflared + lite service profile — public ON
   lab      lite + dozzle + postgres-lite
   status   df, free, docker compose ls/ps, docker system df
 
-Catatan:
-  - mode desktop & lite juga menonaktifkan akses publik (cloudflared ikut down).
-  - public/private switch = ganti mode, bukan edit compose.
+Notes:
+  - desktop & lite modes also disable public access (cloudflared goes down too).
+  - public/private switch = change mode, not edit compose.
 EOF
   exit "${1:-2}"
 }
 
 require_docker() {
-  command -v docker >/dev/null || { echo "docker tidak ditemukan" >&2; exit 1; }
-  docker info >/dev/null 2>&1 || { echo "daemon docker tidak jalan / butuh sudo" >&2; exit 1; }
+  command -v docker >/dev/null || { echo "docker not found" >&2; exit 1; }
+  docker info >/dev/null 2>&1 || { echo "docker daemon not running / needs sudo" >&2; exit 1; }
 }
 
 cmd="${1:-}"

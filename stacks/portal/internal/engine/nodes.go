@@ -11,12 +11,12 @@ import (
 	"portal/internal/registry"
 )
 
-// Status node: connected = live & terdaftar; baru = live belum terdaftar
-// (kandidat klaim); rebind = terdaftar tapi client_id-nya hilang dan ada
-// pengganti yang mirip (origin_ip sama); offline = terdaftar, tidak ada live.
+// Node status: connected = live and registered; new = live but unregistered
+// (claim candidate); rebind = registered but its client_id vanished while a
+// look-alike replacement exists (same origin IP); offline = registered, none live.
 const (
 	NodeConnected = "connected"
-	NodeNew       = "baru"
+	NodeNew       = "new"
 	NodeRebind    = "rebind"
 	NodeOffline   = "offline"
 )
@@ -37,7 +37,7 @@ type NodeStatus struct {
 	LastSeen   time.Time `json:"last_seen,omitempty"`
 	Registered bool      `json:"registered"`
 	Status     string    `json:"status"`
-	// RebindTo: client_id pengganti yang disarankan (hanya utk status rebind).
+	// RebindTo: suggested replacement client_id (only for status rebind).
 	RebindTo string `json:"rebind_to,omitempty"`
 }
 
@@ -53,8 +53,8 @@ type TunnelInfo struct {
 }
 
 type NodeView struct {
-	Nodes      []NodeStatus `json:"nodes"`      // terdaftar (registry)
-	Candidates []NodeStatus `json:"candidates"` // live belum terdaftar
+	Nodes      []NodeStatus `json:"nodes"`      // registered in the node store
+	Candidates []NodeStatus `json:"candidates"` // live but not registered yet
 	Tunnels    []TunnelInfo `json:"tunnels"`
 	Warnings   []string     `json:"warnings,omitempty"`
 }
@@ -66,14 +66,14 @@ func short(id string) string {
 	return id
 }
 
-// NodeView merge koneksi live (semua tunnel relevan) dengan registry node.
-// Sumber kebenaran nama node = registry lokal; CF tidak menyimpan nama.
+// NodeView merges live connections (all relevant tunnels) with the node store.
+// Source of truth for node names = the local store; CF keeps no names.
 func (e *Engine) NodeView(ctx context.Context) (NodeView, error) {
 	view := NodeView{Nodes: []NodeStatus{}, Candidates: []NodeStatus{}, Tunnels: []TunnelInfo{}}
 
 	tunnels, err := e.CF.ListTunnels(ctx)
 	if err != nil {
-		return view, fmt.Errorf("daftar tunnel: %w", err)
+		return view, fmt.Errorf("list tunnels: %w", err)
 	}
 
 	// live groups per tunnel
@@ -87,14 +87,14 @@ func (e *Engine) NodeView(ctx context.Context) (NodeView, error) {
 	for _, t := range tunnels {
 		tunnelByID[t.ID] = t
 	}
-	// pastikan tunnel infra ikut terbaca walau tidak muncul di list
+	// make sure the infra tunnel is covered even when it is missing from the list
 	if _, ok := tunnelByID[e.Cfg.CFTunnelID]; !ok {
-		view.Warnings = append(view.Warnings, "tunnel infra "+short(e.Cfg.CFTunnelID)+" tidak ada di daftar CF (terhapus?)")
+		view.Warnings = append(view.Warnings, "infra tunnel "+short(e.Cfg.CFTunnelID)+" is missing from the CF list (deleted?)")
 	}
 	for id, t := range tunnelByID {
 		groups, err := e.CF.ConnectionsForTunnel(ctx, id)
 		if err != nil {
-			view.Warnings = append(view.Warnings, "koneksi "+t.Name+" gagal dibaca: "+err.Error())
+			view.Warnings = append(view.Warnings, "failed to read connections for "+t.Name+": "+err.Error())
 			continue
 		}
 		for _, g := range groups {
@@ -129,7 +129,7 @@ func (e *Engine) NodeView(ctx context.Context) (NodeView, error) {
 		return view.Tunnels[i].Name < view.Tunnels[j].Name
 	})
 
-	// kandidat = live yang belum terdaftar
+	// candidates = live connections not registered yet
 	claimed := map[string]bool{}
 	for _, nd := range e.NS.List() {
 		claimed[nd.ClientID] = true
@@ -141,7 +141,7 @@ func (e *Engine) NodeView(ctx context.Context) (NodeView, error) {
 	}
 	sort.Slice(view.Candidates, func(i, j int) bool { return view.Candidates[i].RunAt.Before(view.Candidates[j].RunAt) })
 
-	// node terdaftar: connected / rebind / offline
+	// registered nodes: connected / rebind / offline
 	for _, nd := range e.NS.List() {
 		st := NodeStatus{
 			ClientID: nd.ClientID, ShortID: short(nd.ClientID),
@@ -155,7 +155,7 @@ func (e *Engine) NodeView(ctx context.Context) (NodeView, error) {
 			st = e.nodeStatusFromLive(lv.group, lv.tunnelID, lv.tunnelName, NodeConnected)
 			st.Name, st.Origin, st.Notes, st.LastSeen, st.Registered = nd.Name, nd.Origin, nd.Notes, nd.LastSeen, true
 			st.ShortID = short(nd.ClientID)
-			// ingat origin_ip terakhir: dipakai deteksi rebind setelah restart
+			// remember last origin IPs: used to detect a rebind after restart
 			e.NS.RememberIPs(nd.ClientID, lv.group.OriginIPs())
 			e.NS.Touch(nd.ClientID, time.Now().UTC())
 		} else {
@@ -198,7 +198,7 @@ func (e *Engine) nodeStatusFromLive(g cfclient.ConnGroup, tunnelID, tunnelName, 
 	}
 }
 
-// ClaimNode mengikat client_id live ke nama node di registry.
+// ClaimNode binds a live client_id to a node name in the store.
 func (e *Engine) ClaimNode(clientID, tunnelID, name, origin, notes string) (registry.Node, error) {
 	name = strings.ToLower(strings.TrimSpace(name))
 	nd := registry.Node{
@@ -215,20 +215,20 @@ func (e *Engine) ClaimNode(clientID, tunnelID, name, origin, notes string) (regi
 func (e *Engine) UnbindNode(clientID string) (registry.Node, error) {
 	nd, ok := e.NS.Get(clientID)
 	if !ok {
-		return registry.Node{}, fmt.Errorf("client_id %s tidak ada di registry", short(clientID))
+		return registry.Node{}, fmt.Errorf("client_id %s not in the registry", short(clientID))
 	}
 	return nd, e.NS.Delete(clientID)
 }
 
-// RebindNode memindahkan nama/origin node lama ke client_id baru (cloudflared
-// restart biasanya mengganti client_id).
+// RebindNode moves the old node name/origin to a new client_id (a cloudflared
+// restart usually changes the client_id).
 func (e *Engine) RebindNode(oldClientID, newClientID string) (registry.Node, error) {
 	nd, ok := e.NS.Get(oldClientID)
 	if !ok {
-		return registry.Node{}, fmt.Errorf("node lama %s tidak ada", short(oldClientID))
+		return registry.Node{}, fmt.Errorf("old node %s not found", short(oldClientID))
 	}
 	if _, ok := e.NS.Get(newClientID); ok {
-		return registry.Node{}, fmt.Errorf("client_id %s sudah terdaftar", short(newClientID))
+		return registry.Node{}, fmt.Errorf("client_id %s is already registered", short(newClientID))
 	}
 	if err := e.NS.Delete(oldClientID); err != nil {
 		return registry.Node{}, err
@@ -238,7 +238,7 @@ func (e *Engine) RebindNode(oldClientID, newClientID string) (registry.Node, err
 	if err := e.NS.Put(nd); err != nil {
 		return registry.Node{}, err
 	}
-	// ikut pindahkan service yang menunjuk node lama supaya tidak jadi drift
+	// move any services that point at the old node so they do not become drift
 	for _, svc := range e.Reg.List() {
 		if svc.NodeID != oldClientID {
 			continue
@@ -246,7 +246,7 @@ func (e *Engine) RebindNode(oldClientID, newClientID string) (registry.Node, err
 		cp := *svc
 		cp.NodeID = newClientID
 		if err := e.Reg.Put(cp); err != nil {
-			return nd, fmt.Errorf("service %s gagal diupdate: %w", svc.Name, err)
+			return nd, fmt.Errorf("service %s could not be updated: %w", svc.Name, err)
 		}
 	}
 	got, _ := e.NS.Get(newClientID)
@@ -255,19 +255,19 @@ func (e *Engine) RebindNode(oldClientID, newClientID string) (registry.Node, err
 
 // ---- tunnel managed (5C) ----
 
-// CreateManagedTunnel membuat tunnel baru remote-config lalu menandainya
-// sebagai milik portal (boleh dihapus lewat portal).
+// CreateManagedTunnel creates a new remote-config tunnel and marks it as
+// portal-owned (deletable from the portal).
 func (e *Engine) CreateManagedTunnel(ctx context.Context, name, origin string) (TunnelInfo, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
-		return TunnelInfo{}, fmt.Errorf("nama tunnel kosong")
+		return TunnelInfo{}, fmt.Errorf("tunnel name is empty")
 	}
 	t, err := e.CF.CreateTunnel(ctx, name)
 	if err != nil {
-		return TunnelInfo{}, fmt.Errorf("buat tunnel: %w", err)
+		return TunnelInfo{}, fmt.Errorf("create tunnel: %w", err)
 	}
 	if t.ID == "" {
-		return TunnelInfo{}, fmt.Errorf("respons CF tidak membawa id tunnel")
+		return TunnelInfo{}, fmt.Errorf("CF response carries no tunnel id")
 	}
 	mt := registry.ManagedTunnel{ID: t.ID, Name: name, Managed: true, Origin: strings.TrimSpace(origin)}
 	if err := e.NS.PutTunnel(mt); err != nil {
@@ -276,16 +276,16 @@ func (e *Engine) CreateManagedTunnel(ctx context.Context, name, origin string) (
 	return TunnelInfo{ID: t.ID, Name: name, Status: t.Status, CreatedAt: t.CreatedAt, Managed: true, Infra: false}, nil
 }
 
-// DeleteManagedTunnel hapus tunnel. Guard: tunnel infra dan tunnel yang tidak
-// dibuat portal tidak pernah boleh dihapus; service yang menunjuk tunnel juga
-// harus dipindah/dihapus dulu.
+// DeleteManagedTunnel deletes a tunnel. Guard: the infra tunnel and tunnels
+// not created by the portal are never deletable; services pointing at the
+// tunnel must be moved or deleted first.
 func (e *Engine) DeleteManagedTunnel(ctx context.Context, tid string) error {
 	if tid == e.Cfg.CFTunnelID {
-		return fmt.Errorf("tunnel infra (%s) tidak bisa dihapus dari portal", short(tid))
+		return fmt.Errorf("infra tunnel (%s) cannot be deleted from the portal", short(tid))
 	}
 	mt, ok := e.NS.GetTunnel(tid)
 	if !ok || !mt.Managed {
-		return fmt.Errorf("tunnel %s tidak ditandai managed portal", short(tid))
+		return fmt.Errorf("tunnel %s is not marked portal-managed", short(tid))
 	}
 	var users []string
 	for _, svc := range e.Reg.List() {
@@ -294,10 +294,10 @@ func (e *Engine) DeleteManagedTunnel(ctx context.Context, tid string) error {
 		}
 	}
 	if len(users) > 0 {
-		return fmt.Errorf("tunnel masih dipakai: %s — pindahkan atau hapus hostname dulu", strings.Join(users, ", "))
+		return fmt.Errorf("tunnel still in use by: %s — move or delete those hostnames first", strings.Join(users, ", "))
 	}
 	if err := e.CF.DeleteTunnel(ctx, tid); err != nil {
-		return fmt.Errorf("hapus tunnel di CF: %w", err)
+		return fmt.Errorf("delete tunnel at CF: %w", err)
 	}
 	if err := e.NS.DeleteTunnel(tid); err != nil {
 		return err

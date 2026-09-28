@@ -1,27 +1,27 @@
 {{template "header" .}}
 <div class="page-head">
   <div>
-    <h1>Hubungkan node {{.Name}}</h1>
-    <p class="sub">Tunnel {{.TunnelName}} · <span class="mono">{{.TunnelID}}</span>. Jalankan salah satu perintah di mesin node, lalu biarkan portal menunggu koneksi.</p>
+    <h1>Connect node {{.Name}}</h1>
+    <p class="sub">Tunnel {{.TunnelName}} · <span class="mono">{{.TunnelID}}</span>. Run one of the commands on the node machine, then let the portal wait for the connection.</p>
   </div>
-  <a class="btn ghost" href="/nodes">Kembali</a>
+  <a class="btn ghost" href="/nodes">Back</a>
 </div>
 
 {{if .TokenErr}}
 <div class="panel">
-  <p class="flash err" role="alert">Token tunnel tidak bisa dibaca: {{.TokenErr}}. Cek izin token API (Cloudflare Tunnel Read) lalu ulangi dari halaman <a href="/nodes">Tunnel &amp; Node</a>.</p>
+  <p class="flash err" role="alert">Tunnel token could not be read: {{.TokenErr}}. Check the API token permission (Cloudflare Tunnel Read) and retry from the <a href="/nodes">Tunnel &amp; Node</a> page.</p>
 </div>
 {{end}}
 
 <section class="panel" data-wait data-name="{{.Name}}" data-tunnel="{{.TunnelID}}" data-origin="{{.Origin}}" data-notes="{{.Notes}}">
-  <div class="panel-head"><h2>1 · Menunggu koneksi</h2></div>
-  <p><span class="mark off" id="wait-mark">MENUNGGU</span> <span id="wait-text">Menunggu cloudflared dari mesin ini terhubung… dicek tiap 3 detik.</span></p>
-  <p class="hint">Begitu koneksi baru terdeteksi, portal otomatis mengikatkannya ke nama <span class="mono">{{.Name}}</span> dan membuka daftar node.</p>
+  <div class="panel-head"><h2>1 · Waiting for connection</h2></div>
+  <p><span class="mark off" id="wait-mark">WAITING</span> <span id="wait-text">Waiting for cloudflared from this machine to connect… checked every 3 seconds.</span></p>
+  <p class="hint">As soon as a new connection shows up, the portal binds it to the name <span class="mono">{{.Name}}</span> and opens the node list.</p>
   <div id="wait-manual" hidden></div>
 </section>
 
 <section class="panel">
-  <div class="panel-head"><h2>2 · Pilih cara koneksi</h2></div>
+  <div class="panel-head"><h2>2 · Pick a connection method</h2></div>
   <div class="tabs">
     <input type="radio" name="mode" id="mode-docker" checked>
     <label for="mode-docker">Docker</label>
@@ -30,32 +30,32 @@
 
     <div class="tab-panes">
       <div class="tab-pane" id="pane-docker">
-        <p><strong>Pakai kapan:</strong> mesin sudah ada Docker — VPS, Raspberry Pi OS, mini PC, home server. Container auto-restart dan upgrade tinggal ganti image. <strong>Cocok untuk</strong> mayoritas node rumahan.</p>
+        <p><strong>Use when:</strong> the machine already runs Docker — VPS, Raspberry Pi OS, mini PC, home server. The container auto-restarts and upgrades are just an image swap. <strong>Fits</strong> most home nodes.</p>
         <div class="codeblock">
-          <div class="codehead"><span class="mono">docker run</span><button type="button" class="small" data-copy>Salin</button></div>
+          <div class="codehead"><span class="mono">docker run</span><button type="button" class="small" data-copy>Copy</button></div>
           <pre class="code">{{.DockerCmd}}</pre>
         </div>
-        <p class="hint">Token bersifat rahasia — jangan tempel di chat publik. Jaringan container: pastikan mesin node bisa menjangkau origin yang dipilih (mis. <span class="mono">{{.Origin}}</span>).</p>
+        <p class="hint">The token is a secret — never paste it in a public chat. Container network: make sure the node machine can reach the chosen origin (e.g. <span class="mono">{{.Origin}}</span>).</p>
       </div>
 
       <div class="tab-pane" id="pane-bin">
-        <p><strong>Pakai kapan:</strong> mesin tanpa Docker, server produksi yang butuh systemd, atau OS non-Linux. Binary ringan, jalankan sebagai service supaya hidup lagi setelah reboot. <strong>Cocok untuk</strong> VPS kecil dan mesin yang dikelola penuh.</p>
+        <p><strong>Use when:</strong> the machine has no Docker, a production server that needs systemd, or a non-Linux OS. The binary is tiny — run it as a service so it comes back after reboot. <strong>Fits</strong> small VPS and fully managed machines.</p>
         <div class="codeblock">
-          <div class="codehead"><span class="mono">install binary + service</span><button type="button" class="small" data-copy>Salin</button></div>
+          <div class="codehead"><span class="mono">install binary + service</span><button type="button" class="small" data-copy>Copy</button></div>
           <pre class="code">{{.BinaryCmd}}</pre>
         </div>
-        <p class="hint">Ganti <span class="mono">linux-amd64</span> dengan <span class="mono">linux-arm64</span> bila mesinnya ARM (Raspberry Pi 4/5 64-bit).</p>
+        <p class="hint">Swap <span class="mono">linux-amd64</span> for <span class="mono">linux-arm64</span> on ARM machines (Raspberry Pi 4/5 64-bit).</p>
       </div>
     </div>
   </div>
 </section>
 
 <section class="panel">
-  <div class="panel-head"><h2>3 · Setelah tersambung</h2></div>
+  <div class="panel-head"><h2>3 · After it connects</h2></div>
   <ul class="plain">
-    <li>Node muncul di <a href="/nodes">daftar node</a> dengan status <span class="mark ok">TERHUBUNG</span>.</li>
-    <li>Di form hostname, node ini bisa dipilih pada kolom <strong>Connector / node</strong> — origin otomatis ikut terisi.</li>
-    <li>Koneksi putus? Portal menandai <span class="mark off">OFFLINE</span>; bila cloudflared restart dengan client_id baru, tombol <strong>Ikat ke …</strong> muncul untuk rebind.</li>
+    <li>The node shows up in the <a href="/nodes">node list</a> with status <span class="mark ok">CONNECTED</span>.</li>
+    <li>In the hostname form, this node can be picked in the <strong>Connector / node</strong> column — the origin fills in automatically.</li>
+    <li>Connection dropped? The portal marks it <span class="mark off">OFFLINE</span>; if cloudflared restarts with a new client_id, a <strong>Rebind to …</strong> button appears.</li>
   </ul>
 </section>
 {{template "footer" .}}

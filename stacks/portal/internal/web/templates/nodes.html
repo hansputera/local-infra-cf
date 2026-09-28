@@ -2,30 +2,30 @@
 <div class="page-head">
   <div>
     <h1>Tunnel &amp; Node</h1>
-    <p class="sub">Node = satu proses cloudflared. Cloudflare hanya mengenal <span class="mono">client_id</span>; nama, asal, dan tujuan origin disimpan portal.</p>
+    <p class="sub">A node = one cloudflared process. Cloudflare only knows the <span class="mono">client_id</span>; name, notes and origin are stored by the portal.</p>
   </div>
-  <a class="btn" href="#add">Tambah connector</a>
+  <a class="btn" href="#add">Add connector</a>
 </div>
 
 <section class="panel">
-  <h2>Aturan main</h2>
+  <h2>Ground rules</h2>
   <ul class="plain">
-    <li>Trafik satu tunnel <strong>dibagi rata</strong> ke semua connector yang terhubung. Origin harus terjangkau dari <strong>semua</strong> node dalam tunnel itu.</li>
-    <li>Mau per-mesin (origin terpisah, deterministik)? Pakai <strong>satu tunnel per node</strong> — bisa dibuat langsung dari halaman ini.</li>
-    <li>Origin default portal: <span class="mono">{{.Origin}}</span>. Per-node bisa disetel sendiri saat menambah connector.</li>
+    <li>Traffic on one tunnel is <strong>shared evenly</strong> across all connected connectors. The origin must be reachable from <strong>every</strong> node in that tunnel.</li>
+    <li>Want per-machine (separate, deterministic origins)? Use <strong>one tunnel per node</strong> — you can create one right from this page.</li>
+    <li>Portal default origin: <span class="mono">{{.Origin}}</span>. Override it per node when adding a connector.</li>
   </ul>
 </section>
 
 <section class="panel">
-  <div class="panel-head"><h2>Tunnel di akun ini</h2></div>
+  <div class="panel-head"><h2>Tunnels on this account</h2></div>
   {{if .View.Warnings}}
     {{range .View.Warnings}}<p class="flash err" role="alert">{{.}}</p>{{end}}
   {{end}}
   {{if eq (len .View.Tunnels) 0}}
-    <p class="empty">Belum ada tunnel. Buat lewat tombol di bawah atau dashboard Cloudflare.</p>
+    <p class="empty">No tunnels yet. Create one with the button below or in the Cloudflare dashboard.</p>
   {{else}}
   <table>
-    <thead><tr><th>Nama</th><th>Status</th><th>Connector</th><th>ID</th><th></th></tr></thead>
+    <thead><tr><th>Name</th><th>Status</th><th>Connectors</th><th>ID</th><th></th></tr></thead>
     <tbody>
       {{range .View.Tunnels}}
       <tr>
@@ -39,8 +39,8 @@
         <td class="mono">{{.ID}}</td>
         <td class="actions">
           {{if and .Managed (not .Infra)}}
-          <form method="post" action="/tunnels/{{.ID}}/delete" class="inline" data-confirm="Hapus tunnel {{.Name}}? DNS dan hostname yang mengarah ke tunnel ini akan mati. Tunnel infra tidak bisa dihapus.">
-            <button type="submit" class="small danger">Hapus</button>
+          <form method="post" action="/tunnels/{{.ID}}/delete" class="inline" data-confirm="Delete tunnel {{.Name}}? DNS records and hostnames pointing at this tunnel will go down. The infra tunnel cannot be deleted.">
+            <button type="submit" class="small danger">Delete</button>
           </form>
           {{end}}
         </td>
@@ -51,36 +51,36 @@
   {{end}}
 
   <details class="addbox" {{if eq (len .View.Tunnels) 0}}open{{end}}>
-    <summary>Buat tunnel baru</summary>
+    <summary>Create new tunnel</summary>
     <form method="post" action="/tunnels/create" class="row2">
       <div>
-        <label for="tname">Nama tunnel</label>
+        <label for="tname">Tunnel name</label>
         <input id="tname" name="name" required placeholder="pi-node" pattern=".+">
       </div>
       <div>
-        <label for="torigin">Origin default (opsional)</label>
+        <label for="torigin">Default origin (optional)</label>
         <input id="torigin" name="origin" placeholder="http://192.168.1.7:80">
-        <p class="hint">Dipakai sebagai default origin saat tunnel ini dipilih di form hostname.</p>
+        <p class="hint">Used as the default origin when this tunnel is picked in the hostname form.</p>
       </div>
-      <div class="form-actions"><button type="submit" class="btn">Buat tunnel</button></div>
+      <div class="form-actions"><button type="submit" class="btn">Create tunnel</button></div>
     </form>
   </details>
 </section>
 
 <section class="panel">
-  <div class="panel-head"><h2>Node terdaftar</h2></div>
+  <div class="panel-head"><h2>Registered nodes</h2></div>
   {{if eq (len .View.Nodes) 0}}
-    <p class="empty">Belum ada node. Tambah connector pertama di bawah.</p>
+    <p class="empty">No nodes yet. Add your first connector below.</p>
   {{else}}
   <table>
-    <thead><tr><th>Nama</th><th>Status</th><th>Tunnel</th><th>client_id</th><th>Colo</th><th>Versi</th><th>Origin IP</th><th>Terakhir</th><th></th></tr></thead>
+    <thead><tr><th>Name</th><th>Status</th><th>Tunnel</th><th>client_id</th><th>Colo</th><th>Version</th><th>Origin IP</th><th>Last seen</th><th></th></tr></thead>
     <tbody>
       {{range .View.Nodes}}
       <tr>
         <td>{{.Name}}{{if .Notes}}<span class="tag">{{.Notes}}</span>{{end}}</td>
         <td>
-          {{if eq .Status "connected"}}<span class="mark ok">TERHUBUNG</span>
-          {{else if eq .Status "rebind"}}<span class="mark drift">GANTI ID</span>
+          {{if eq .Status "connected"}}<span class="mark ok">CONNECTED</span>
+          {{else if eq .Status "rebind"}}<span class="mark drift">REBIND</span>
           {{else}}<span class="mark off">OFFLINE</span>{{end}}
         </td>
         <td class="mono">{{.TunnelName}}</td>
@@ -93,11 +93,11 @@
           {{if eq .Status "rebind"}}
           <form method="post" action="/nodes/{{.ClientID}}/rebind" class="inline">
             <input type="hidden" name="client_id" value="{{.RebindTo}}">
-            <button type="submit" class="small">Ikat ke {{shortID .RebindTo}}</button>
+            <button type="submit" class="small">Rebind to {{shortID .RebindTo}}</button>
           </form>
           {{end}}
-          <form method="post" action="/nodes/{{.ClientID}}/unbind" class="inline" data-confirm="Lepas node {{.Name}} dari registry? Tidak menghentikan cloudflared, hanya menghapus namanya dari portal.">
-            <button type="submit" class="small danger">Lepas</button>
+          <form method="post" action="/nodes/{{.ClientID}}/unbind" class="inline" data-confirm="Unbind node {{.Name}} from the registry? This does not stop cloudflared, it only drops the name from the portal.">
+            <button type="submit" class="small danger">Unbind</button>
           </form>
         </td>
       </tr>
@@ -108,9 +108,9 @@
 </section>
 
 <section class="panel">
-  <div class="panel-head"><h2>Koneksi baru (belum dinamai)</h2></div>
+  <div class="panel-head"><h2>New connections (not named yet)</h2></div>
   {{if eq (len .View.Candidates) 0}}
-    <p class="empty">Tidak ada koneksi tak dikenal. Semua cloudflared sudah terikat ke nama node.</p>
+    <p class="empty">No unknown connections. Every cloudflared is already bound to a node name.</p>
   {{else}}
     {{range .View.Candidates}}
     <form method="post" action="/nodes/claim" class="claim">
@@ -122,19 +122,19 @@
         {{if .Colos}}<span class="tag">{{index .Colos 0}}</span>{{end}}
         {{if .OriginIPs}}<span class="tag mono">{{index .OriginIPs 0}}</span>{{end}}
       </div>
-      <input name="name" required pattern="[a-z0-9]([a-z0-9-]*[a-z0-9])?" placeholder="nama-node" aria-label="Nama node">
-      <input name="origin" placeholder="origin (mis. http://traefik:80)" aria-label="Origin">
-      <button type="submit" class="small">Ikkan</button>
+      <input name="name" required pattern="[a-z0-9]([a-z0-9-]*[a-z0-9])?" placeholder="node-name" aria-label="Node name">
+      <input name="origin" placeholder="origin (e.g. http://traefik:80)" aria-label="Origin">
+      <button type="submit" class="small">Claim</button>
     </form>
     {{end}}
   {{end}}
 </section>
 
 <section class="panel" id="add">
-  <div class="panel-head"><h2>Tambah connector</h2></div>
-  <p class="sub">Langkah 1: beri nama, pilih tunnel, lalu buat instruksi koneksi. Portal menunggu koneksi masuk otomatis.</p>
+  <div class="panel-head"><h2>Add connector</h2></div>
+  <p class="sub">Step 1: give it a name, pick a tunnel, then generate the connection instructions. The portal waits for the incoming connection automatically.</p>
   <form method="post" action="/nodes/add">
-    <label for="nname">Nama node</label>
+    <label for="nname">Node name</label>
     <input id="nname" name="name" required pattern="[a-z0-9]([a-z0-9-]*[a-z0-9])?" placeholder="pi-node">
 
     <label for="ntunnel">Tunnel</label>
@@ -145,21 +145,21 @@
         <option value="{{.InfraID}}">infra · {{.InfraID}}</option>
       {{end}}
     </select>
-    <p class="hint">Default join tunnel infra (token sama, cocok utk LAN/HA). Untuk isolasi per mesin, isi "Buat tunnel baru" di bawah — instruksinya memakai token tunnel itu.</p>
+    <p class="hint">Defaults to joining the infra tunnel (same token — good for LAN/HA). For per-machine isolation, fill in "Create new tunnel" below — the instructions then use that tunnel's token.</p>
 
-    <label for="newtun">Buat tunnel baru (opsional)</label>
-    <input id="newtun" name="new_tunnel" placeholder="kosongkan bila memakai tunnel di atas">
-    <p class="hint">Diisi nama tunnel → portal membuat tunnel baru lalu instruksi koneksi memakainya.</p>
+    <label for="newtun">Create new tunnel (optional)</label>
+    <input id="newtun" name="new_tunnel" placeholder="leave empty to use the tunnel above">
+    <p class="hint">Put a tunnel name here → the portal creates it first, then the connection instructions use it.</p>
 
-    <label for="norigin">Origin node (opsional)</label>
-    <input id="norigin" name="origin" placeholder="http://traefik:80 atau http://192.168.1.7:80">
-    <p class="hint">Alamat yang dicapai cloudflared dari mesin node ini. Default portal: <span class="mono">{{.Origin}}</span>.</p>
+    <label for="norigin">Node origin (optional)</label>
+    <input id="norigin" name="origin" placeholder="http://traefik:80 or http://192.168.1.7:80">
+    <p class="hint">Address cloudflared reaches from this node's machine. Portal default: <span class="mono">{{.Origin}}</span>.</p>
 
-    <label for="nnotes">Catatan (opsional)</label>
-    <input id="nnotes" name="notes" placeholder="mis. Raspberry Pi di kamar">
+    <label for="nnotes">Notes (optional)</label>
+    <input id="nnotes" name="notes" placeholder="e.g. Raspberry Pi in the bedroom">
 
     <div class="form-actions">
-      <button type="submit" class="btn">Buat instruksi koneksi</button>
+      <button type="submit" class="btn">Generate connection instructions</button>
     </div>
   </form>
 </section>

@@ -15,9 +15,10 @@ type Config struct {
 	CFAccountID string
 	CFTunnelID  string
 
-	// PublicOrigin adalah service string ingress CF. Default traefik di network
-	// compose. Ganti ke IP LAN (mis. http://192.168.1.5:80) saat connector tunnel
-	// pindah ke device lain: hostname "traefik" tidak resolve di luar host ini.
+	// PublicOrigin is the CF ingress service string. Defaults to traefik on the
+	// compose network. Switch it to a LAN IP (e.g. http://192.168.1.5:80) when
+	// the tunnel connector moves to another device: the hostname "traefik" does
+	// not resolve outside this host.
 	PublicOrigin string
 
 	TraefikAPI  string

@@ -1,5 +1,5 @@
-# Build: Go -> biner statis. Runtime: docker:cli supaya `docker compose`
-# tersedia untuk aksi stack dari dalam portal.
+# Build: Go -> static binary. Runtime: docker:cli so `docker compose`
+# is available for stack actions from inside the portal.
 FROM golang:1.27-alpine AS build
 WORKDIR /src
 COPY go.mod ./

@@ -14,14 +14,14 @@ services:
       CF_TUNNEL_ID: 44703f6e-2691-4677-8fe0-57245730f516
       TRAEFIK_API: http://traefik:8080
       PUBLIC_ORIGIN: http://traefik:80
-      # Ganti ke IP LAN (mis. http://192.168.1.5:80) bila connector tunnel
-      # pindah ke device lain: nama "traefik" tidak resolve di luar host ini.
+      # Change to a LAN IP (e.g. http://192.168.1.5:80) if the tunnel connector
+      # moves to another device: the name "traefik" does not resolve outside this host.
       PORTAL_ACCESS_EMAIL: hanifdwyputrasembiring@gmail.com
     volumes:
       - ../..:/infra
       - /var/run/docker.sock:/var/run/docker.sock
-    # Hanya bootstrap lokal. Publik lewat CF Access setelah token di-rotate,
-    # jadi hostname portal BELUM didaftarkan ke ingress tunnel.
+    # Local bootstrap only. Public access goes through CF Access after the token is rotated,
+    # so the portal hostname is NOT yet registered in the tunnel ingress.
     ports:
       - "127.0.0.1:8300:3000"
     networks: [proxy]

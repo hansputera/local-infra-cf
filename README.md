@@ -70,7 +70,7 @@ in the tracked source hardcodes account ids or tokens.
 Ports are only bound to `127.0.0.1` — never `0.0.0.0:80/443`.
 Fully public through a single Cloudflare Tunnel (no router port-forward).
 
-## Honest limits (PHASE 2)
+## Honest limits
 
 - Public is **down in desktop mode, on sleep, or on battery** — by design.
 - TLS at the edge: Cloudflare (Full). Full strict follows once local certs (mkcert)
@@ -82,7 +82,7 @@ Fully public through a single Cloudflare Tunnel (no router port-forward).
 - Data still lives in `~/infra/data/` (no 1TB NVMe yet) — ready to migrate to `/srv`
   without changing compose (bind path).
 
-## Portal — Infra Manager (PHASE 4 + PHASE 5)
+## Portal — Infra Manager
 
 Go panel (stdlib only, single binary) in `stacks/portal/`: manage hostnames,
 detect drift, monitor tunnel, generate stacks, manage tunnel & connectors.
@@ -101,7 +101,7 @@ detect drift, monitor tunnel, generate stacks, manage tunnel & connectors.
 - `include` injection and stack file deletion are also handled by the portal
   (`POST /stacks`, `/stacks/<name>/up|stop|delete`).
 
-**PHASE 5 — Tunnel & Node** (page `/nodes`):
+**Tunnel & Node** (page `/nodes`):
 
 - List of account tunnels + connector count; **Add connector** button → wizard:
   give a name → pick a tunnel (default: join the infra tunnel, or create a new

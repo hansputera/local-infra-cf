@@ -2,15 +2,21 @@
 # ./publish <subdomain> [origin]
 # Add public hostname to Cloudflare Tunnel + CNAME (idempotent).
 # default origin: http://traefik:80  (Host() routing lives in traefik labels)
-# Example: ./publish app        -> app.itukan.my.id
+# Example: ./publish app        -> app.<PUBLIC_DOMAIN>
 #         ./publish grafana http://host.docker.internal:3000
 set -euo pipefail
 
 cd "$(dirname "$(readlink -f "$0")")"
 
-ACCOUNT_ID="704cdc3baf4cd34018a536e0a560f830"
-TUNNEL_ID="44703f6e-2691-4677-8fe0-57245730f516"
-DOMAIN="itukan.my.id"
+# Identity comes from .env (gitignored) — see .env.example.
+[ -f .env ] || { echo ".env not found (copy .env.example and fill it in)" >&2; exit 1; }
+set -a; . .env; set +a
+ACCOUNT_ID="${CF_ACCOUNT_ID:-}"
+TUNNEL_ID="${CF_TUNNEL_ID:-}"
+DOMAIN="${PUBLIC_DOMAIN:-}"
+[ -n "$ACCOUNT_ID" ] && [ -n "$TUNNEL_ID" ] && [ -n "$DOMAIN" ] || {
+  echo "CF_ACCOUNT_ID / CF_TUNNEL_ID / PUBLIC_DOMAIN must be set in .env" >&2; exit 1
+}
 
 sub="${1:-}"
 origin="${2:-http://traefik:80}"

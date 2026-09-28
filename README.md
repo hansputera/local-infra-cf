@@ -3,6 +3,50 @@
 Home-server infra on Arch Linux (ASUS TUF F15). One Compose project,
 three modes via profiles, Traefik v3 + Cloudflare Tunnel ingress.
 
+## What this project does
+
+Self-hosting a few services at home without opening a single router port.
+Everything runs as containers under **one** Compose project, sits behind
+**one** reverse proxy (Traefik), and reaches the internet through **one**
+outbound Cloudflare Tunnel — so no public IP, no port-forwarding, no
+manually issued TLS certs on the laptop.
+
+In practice it gives you:
+
+- **Public services on your own domain** — `whoami.example.com` and friends
+  resolve through Cloudflare to the tunnel, then to Traefik, then to the
+  right container. Adding a hostname is one form in the portal (or one
+  `./publish` CLI call).
+- **Private services that never leave the LAN** — Traefik dashboard and
+  Dozzle only bind `127.0.0.1` / Tailscale, and are never added to the tunnel.
+- **A control plane (the portal)** — a small Go panel that owns the boring
+  parts: writes Traefik route files, keeps tunnel ingress + DNS in sync,
+  tells you when reality drifted from the registry, and generates new
+  stack files.
+- **Multi-machine connectors** — cloudflared can run on this laptop or on
+  any other box; the portal tracks nodes, their tunnel, origin and health,
+  and can create one tunnel per machine when isolation matters.
+- **Three power modes** — everything down for development (`desktop`), a
+  small always-on footprint (`lite`), or heavy extras on top (`lab`), each
+  with a memory/CPU ceiling so the laptop stays usable.
+
+Request flow when a hostname is public:
+
+```
+internet → Cloudflare edge (TLS, optional Access)
+        → cloudflared (outbound tunnel, no open ports)
+        → traefik:80  (Host() rule from label or portal-written file)
+        → container:<port>
+```
+
+Private services skip the first two hops and are reachable only from
+localhost / Tailscale.
+
+Configuration and identity live **outside git**: `.env` (public domain,
+Cloudflare zone/account/tunnel ids, uid/gid) and `secrets/` (API token,
+tunnel token, postgres password) — both gitignored and chmod 600. Nothing
+in the tracked source hardcodes account ids or tokens.
+
 ## Modes
 
 | Mode     | Command           | Contents                                     | Resource cap | Public |
@@ -92,7 +136,7 @@ CLI fallback if the portal is down: `./publish <sub> [origin]`.
 ## Usage
 
 ```bash
-cp .env.example .env          # fill in PUBLIC_DOMAIN
+cp .env.example .env          # fill PUBLIC_DOMAIN + your CF_ZONE_ID / CF_ACCOUNT_ID / CF_TUNNEL_ID
 chmod 600 .env secrets/cf-tunnel.yml secrets/postgres.env
 ./mode status                 # environment health check
 ./mode lite                   # public ON
@@ -111,7 +155,7 @@ docker compose --profile lite --profile lab config -q && echo OK
 ```
 infra/
 ├── compose.yaml            # project root: traefik, cloudflared, dozzle, network, logging
-├── .env / .env.example     # PUBLIC_DOMAIN, PUID, PGID (600, gitignored)
+├── .env / .env.example     # PUBLIC_DOMAIN, CF_* ids, PUID, PGID (600, gitignored)
 ├── mode                    # desktop | lite | lab | status
 ├── secrets/                # 600, gitignored (cf-tunnel.yml, postgres.env)
 ├── traefik/
